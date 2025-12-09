@@ -92,10 +92,13 @@ export function SalesForm() {
     useEffect(() => {
         const defaultRate = DEFAULT_FEE_RATES[channel];
         if (defaultRate !== undefined && defaultRate > 0) {
+            // くらしのマーケットなどプラットフォームの場合は自動で手数料を設定
             setFeeType('rate');
             setFeeValue(defaultRate);
-        } else if (feeType === 'rate' && DEFAULT_FEE_RATES[channel] === undefined) {
-            // プラットフォーム以外に変更した場合はリセット
+        } else if (channel !== 'PLATFORM_KURASHI' && channel !== 'PLATFORM_TOTTA') {
+            // プラットフォーム以外に変更した場合は手数料をリセット
+            setFeeType('none');
+            setFeeValue(0);
         }
     }, [channel]);
 
@@ -313,7 +316,7 @@ export function SalesForm() {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel className="text-muted-foreground">受注チャネル</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} value={field.value}>
                                             <FormControl>
                                                 <SelectTrigger className="bg-white/50 dark:bg-black/20 border-zinc-200 dark:border-zinc-800">
                                                     <SelectValue placeholder="チャネルを選択" />
@@ -324,8 +327,8 @@ export function SalesForm() {
                                                 <SelectItem value="REFERRAL">紹介</SelectItem>
                                                 <SelectItem value="SNS">SNS</SelectItem>
                                                 <SelectItem value="WEBSITE">ウェブサイト</SelectItem>
-                                                <SelectItem value="PLATFORM_KURASHI">プラットフォーム（くらしのマーケット）</SelectItem>
-                                                <SelectItem value="PLATFORM_TOTTA">プラットフォーム（Totta）</SelectItem>
+                                                <SelectItem value="PLATFORM_KURASHI">くらしのマーケット（手数料20%）</SelectItem>
+                                                <SelectItem value="PLATFORM_TOTTA">Totta</SelectItem>
                                                 <SelectItem value="REPEAT">リピート</SelectItem>
                                                 <SelectItem value="OTHER">その他</SelectItem>
                                             </SelectContent>
