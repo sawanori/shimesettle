@@ -55,19 +55,19 @@ export function DashboardSummary({
     ];
 
     return (
-        <div className={`grid grid-cols-2 gap-4 ${summaryItems.length === 5 ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+        <div className={`grid grid-cols-2 gap-2 sm:gap-4 ${summaryItems.length === 5 ? 'lg:grid-cols-5 md:grid-cols-3' : 'md:grid-cols-4'}`}>
             {summaryItems.map((item) => (
                 <Card key={item.title}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-gray-600">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 sm:p-6 pb-1 sm:pb-2">
+                        <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
                             {item.title}
                         </CardTitle>
-                        <div className={`p-2 rounded-full ${item.bgColor}`}>
-                            <item.icon className={`h-4 w-4 ${item.color}`} />
+                        <div className={`p-1.5 sm:p-2 rounded-full ${item.bgColor}`}>
+                            <item.icon className={`h-3 w-3 sm:h-4 sm:w-4 ${item.color}`} />
                         </div>
                     </CardHeader>
-                    <CardContent>
-                        <div className={`text-2xl font-bold ${item.color}`}>
+                    <CardContent className="p-3 sm:p-6 pt-0">
+                        <div className={`text-lg sm:text-2xl font-bold ${item.color}`}>
                             ¥{item.value.toLocaleString()}
                         </div>
                     </CardContent>

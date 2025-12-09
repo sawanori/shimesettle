@@ -111,42 +111,47 @@ export default async function Home() {
     return (
         <div className="min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
             <main className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold">NonTurn決算申告</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold">NonTurn決算申告</h1>
                         <p className="text-sm text-gray-500 mt-1">
                             {getFiscalYearLabel(fiscalYear)}
                         </p>
                     </div>
-                    <div className="flex gap-4">
+                    <div className="grid grid-cols-3 sm:flex gap-2 sm:gap-4">
                         <Link href="/expenses">
-                            <Button variant="outline">
-                                <Receipt className="mr-2 h-4 w-4" />
-                                経費登録
+                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                <Receipt className="sm:mr-2 h-4 w-4" />
+                                <span className="hidden sm:inline">経費登録</span>
+                                <span className="sm:hidden text-xs">経費</span>
                             </Button>
                         </Link>
                         <Link href="/sales">
-                            <Button>
-                                <TrendingUp className="mr-2 h-4 w-4" />
-                                売上登録
+                            <Button className="w-full sm:w-auto" size="sm">
+                                <TrendingUp className="sm:mr-2 h-4 w-4" />
+                                <span className="hidden sm:inline">売上登録</span>
+                                <span className="sm:hidden text-xs">売上</span>
                             </Button>
                         </Link>
                         <Link href="/bank">
-                            <Button variant="outline">
-                                <Building2 className="mr-2 h-4 w-4" />
-                                銀行
+                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                <Building2 className="sm:mr-2 h-4 w-4" />
+                                <span className="hidden sm:inline">銀行</span>
+                                <span className="sm:hidden text-xs">銀行</span>
                             </Button>
                         </Link>
                         <Link href="/documents">
-                            <Button variant="outline">
-                                <FileCheck className="mr-2 h-4 w-4" />
-                                書類
+                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                <FileCheck className="sm:mr-2 h-4 w-4" />
+                                <span className="hidden sm:inline">書類</span>
+                                <span className="sm:hidden text-xs">書類</span>
                             </Button>
                         </Link>
-                        <Link href="/management">
-                            <Button variant="ghost">
-                                <Settings className="mr-2 h-4 w-4" />
-                                管理
+                        <Link href="/management" className="col-span-2 sm:col-span-1">
+                            <Button variant="ghost" className="w-full sm:w-auto" size="sm">
+                                <Settings className="sm:mr-2 h-4 w-4" />
+                                <span className="hidden sm:inline">管理</span>
+                                <span className="sm:hidden text-xs">管理</span>
                             </Button>
                         </Link>
                     </div>

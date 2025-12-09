@@ -42,12 +42,12 @@ export function DocumentsPageClient() {
 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 max-w-md">
-                <TabsTrigger value="list">書類一覧</TabsTrigger>
-                <TabsTrigger value="upload">新規登録</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 max-w-xs sm:max-w-md">
+                <TabsTrigger value="list" className="text-sm sm:text-base">書類一覧</TabsTrigger>
+                <TabsTrigger value="upload" className="text-sm sm:text-base">新規登録</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="list" className="mt-6">
+            <TabsContent value="list" className="mt-4 sm:mt-6">
                 {isLoading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
@@ -57,8 +57,8 @@ export function DocumentsPageClient() {
                 )}
             </TabsContent>
 
-            <TabsContent value="upload" className="mt-6">
-                <div className="max-w-xl">
+            <TabsContent value="upload" className="mt-4 sm:mt-6">
+                <div className="max-w-xl mx-auto sm:mx-0">
                     <DocumentForm onSuccess={handleFormSuccess} />
                 </div>
             </TabsContent>

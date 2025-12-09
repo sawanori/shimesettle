@@ -109,26 +109,28 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 w-full">
             {/* フィルター */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <span className="text-sm text-gray-500">種別で絞り込み:</span>
-                <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-48">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">すべて</SelectItem>
-                        {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                                {label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <span className="text-sm text-gray-500 ml-2">
-                    {filteredDocuments.length}件
-                </span>
+                <div className="flex items-center gap-2">
+                    <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger className="w-40 sm:w-48">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">すべて</SelectItem>
+                            {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+                                <SelectItem key={value} value={value}>
+                                    {label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-sm text-gray-500">
+                        {filteredDocuments.length}件
+                    </span>
+                </div>
             </div>
 
             {/* 書類一覧 */}
