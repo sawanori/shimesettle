@@ -40,12 +40,14 @@ ShimeSettle (NonTurn決算申告) is an expense, sales, and bank account managem
   - `api/export-csv/`: Export expenses/sales as Shift-JIS CSV
 - **components/**: Feature-organized React components
   - `expenses/`: ExpenseForm (tabbed single/batch), SingleReceiptUploader, ReceiptUploader
-  - `sales/`: SalesForm, InvoiceUploader, SalesCsvImportDialog
-  - `bank/`: BankAccountForm, CsvImportDialog, BankPageClient
-  - `management/`: ManagementTable, EditExpenseDialog, EditSaleDialog, CsvExportButton
+  - `sales/`: SalesForm (auto-fee for くらしのマーケット), InvoiceUploader, SalesCsvImportDialog
+  - `bank/`: BankAccountForm, CsvImportDialog, BankPageClient, TransactionToExpenseDialog
+  - `management/`: ManagementTable (with documents tab), EditExpenseDialog, EditSaleDialog, CsvExportButton
   - `dashboard/`: DashboardSummary, RevenueBarChart, SalesPieChart
+  - `documents/`: DocumentForm, DocumentUploader, DocumentList, PdfThumbnail
   - `ui/`: shadcn/ui components
 - **lib/**: Core utilities (see Shared Utilities below)
+- **utils/supabase/**: Supabase client factories (`client.ts` for browser, `server.ts` for Server Components/API routes)
 - **types/supabase.ts**: Database types (regenerate with `supabase gen types typescript`)
 
 ### Shared Utilities (`lib/`)
@@ -62,14 +64,15 @@ ShimeSettle (NonTurn決算申告) is an expense, sales, and bank account managem
 
 ### Database Schema (Supabase)
 
-Five main tables with RLS enabled:
-- **expenses**: transaction_date, amount, department, account_item, ai_check_status
+Six main tables with RLS enabled:
+- **expenses**: transaction_date, amount, department, account_item, ai_check_status, file_path
 - **sales**: transaction_date, amount, department, client_name, channel, fee_amount/rate/net_amount
-- **bank_accounts**: name, bank_type, branch_name, initial_balance
-- **bank_transactions**: transaction_date, description, withdrawal, deposit, balance, import_hash
+- **bank_accounts**: name, bank_type, account_type (BANK/CREDIT_CARD), branch_name, initial_balance
+- **bank_transactions**: transaction_date, description, withdrawal, deposit, balance, import_hash, linked_expense_id/linked_sale_id
 - **csv_imports**: file_path, file_name, records_count (original CSV storage metadata)
+- **documents**: title, document_type, issue_date, expiry_date, file_path (証明書類管理)
 
-Storage buckets: `receipts`, `invoices`, `bank-csv` (private)
+Storage buckets: `receipts`, `invoices`, `bank-csv`, `documents` (private)
 
 ### Data Flow Patterns
 
@@ -95,6 +98,8 @@ Storage buckets: `receipts`, `invoices`, `bank-csv` (private)
 - **Tabs with State Preservation**: Use `forceMount` + `hidden` class on TabsContent to prevent react-hook-form state loss when switching tabs
 - **PDF Parsing**: Uses `lib/pdf-utils.ts` with pdf2json
 - **API Security**: Use `lib/api-security.ts` for URL validation and rate limiting in API routes
+- **Auto-fee Calculation**: くらしのマーケット sales auto-apply 20% fee; fee is also auto-registered as expense (支払手数料)
+- **Middleware Auth**: Protected paths defined in `middleware.ts`; unauthenticated users redirected to `/login`
 
 ## Environment Variables
 
@@ -110,7 +115,8 @@ OPENAI_API_KEY=
 - Use `@/*` path alias for imports
 - Client Components require `'use client'` directive
 - Forms use react-hook-form + zod for validation
-- Supabase clients: `client.ts` for browser, `server.ts` for Server Components/API routes
+- Supabase clients: `utils/supabase/client.ts` for browser, `utils/supabase/server.ts` for Server Components/API routes
 - CSV files encoded as Shift-JIS for Excel compatibility in Japan
 - Edit dialogs: Use controlled Dialog with `open`/`onOpenChange` props
 - API routes: Import security utilities from `@/lib/api-security` and schemas from `@/lib/schemas`
+- Playwright tests run sequentially (workers: 1) and auto-start dev server if not running

@@ -92,6 +92,9 @@ export async function POST(request: Request) {
             deposit: t.deposit,
             balance: t.balance,
             import_hash: t.import_hash,
+            processing_date: t.processing_date,
+            foreign_currency_amount: t.foreign_currency_amount,
+            exchange_rate: t.exchange_rate,
             user_id: user.id,
         }));
 

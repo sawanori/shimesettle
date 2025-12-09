@@ -11,9 +11,13 @@ export interface ParsedTransaction {
     transaction_date: string;  // YYYY-MM-DD
     description: string;
     withdrawal: number;        // 出金
-    deposit: number;           // 入金
-    balance: number | null;    // 残高
+    deposit: number;           // 入金（返金など）
+    balance: number | null;    // 残高（カードの場合は請求確定額など、無ければnull）
     import_hash: string;       // 重複防止用ハッシュ
+    // クレジットカード用拡張
+    processing_date?: string | null;      // データ処理日
+    foreign_currency_amount?: number | null; // 海外通貨利用金額
+    exchange_rate?: number | null;        // 換算レート
 }
 
 export interface ParseResult {
@@ -58,8 +62,16 @@ export function parseBankCsv(
                 return parsePaypayCsv(lines, bankAccountId);
             case 'GMO_AOZORA':
                 return parseGmoAozoraCsv(lines, bankAccountId);
+            case 'RAKUTEN_CARD':
+                return parseRakutenCardCsv(lines, bankAccountId);
+            case 'AMEX':
+                return parseAmexCsv(lines, bankAccountId);
             case 'OTHER':
+            case 'OTHER_CARD':
             default:
+                if (bankType === 'OTHER_CARD') {
+                    return parseGenericCardCsv(lines, bankAccountId);
+                }
                 return parseGenericCsv(lines, bankAccountId);
         }
     } catch (error) {
@@ -73,8 +85,8 @@ export function parseBankCsv(
  * バッファをデコード（Shift-JIS or UTF-8）
  */
 function decodeBuffer(buffer: Buffer, bankType: BankType): string {
-    // 楽天銀行のみUTF-8、他（GMOあおぞら含む）はShift-JIS
-    const utf8Banks: BankType[] = ['RAKUTEN'];
+    // 楽天銀行・楽天カードのみUTF-8、他（GMOあおぞら、AMEX含む）はShift-JIS
+    const utf8Banks: BankType[] = ['RAKUTEN', 'RAKUTEN_CARD'];
     const encoding = utf8Banks.includes(bankType) ? 'utf-8' : 'Shift_JIS';
 
     try {
@@ -399,9 +411,223 @@ function parseGmoAozoraCsv(lines: string[], bankAccountId: string): ParseResult 
 }
 
 /**
- * 汎用パーサー（その他の銀行用）
- * 日付, 摘要, 出金, 入金, 残高 の順を想定
+ * 楽天カード
+ * 想定形式: 利用日,利用店名・商品名,利用者,支払方法,利用金額,手数料,支払総額
+ * ※海外利用の場合、備考欄などにレートが含まれる場合があるが、標準CSVでは詳細がないことが多い。
+ * ※ここでは標準的な明細CSVを想定。
  */
+function parseRakutenCardCsv(lines: string[], bankAccountId: string): ParseResult {
+    const result: ParseResult = { success: true, transactions: [], errors: [], skippedRows: 0 };
+
+    let dataStartIndex = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('利用日') && lines[i].includes('利用店名')) {
+            dataStartIndex = i + 1;
+            break;
+        }
+    }
+
+    for (let i = dataStartIndex; i < lines.length; i++) {
+        const cols = parseCsvLine(lines[i]);
+        if (cols.length < 5) {
+            result.skippedRows++;
+            continue;
+        }
+
+        const date = normalizeDate(cols[0]); // 利用日
+        if (!date) {
+            result.skippedRows++;
+            continue;
+        }
+
+        const description = cols[1] || ''; // 利用店名・商品名
+        const amount = parseAmount(cols[4]); // 利用金額
+
+        // 楽天カードCSVでは支払が正の数で来るため、withdrawalにセット
+        // マイナスの場合はキャンセル/返金としてdepositにセット
+        let withdrawal = 0;
+        let deposit = 0;
+
+        if (amount >= 0) {
+            withdrawal = amount;
+        } else {
+            deposit = Math.abs(amount);
+        }
+
+        const transaction: ParsedTransaction = {
+            transaction_date: date,
+            description: description,
+            withdrawal: withdrawal,
+            deposit: deposit,
+            balance: null,
+            import_hash: '',
+            // 楽天カード標準CSVには処理日やレート列は通常ないが、あれば拡張可能
+            processing_date: null,
+            foreign_currency_amount: null,
+            exchange_rate: null
+        };
+
+        transaction.import_hash = generateHash(bankAccountId, date, transaction.description, transaction.withdrawal, transaction.deposit);
+        result.transactions.push(transaction);
+    }
+    return result;
+}
+
+/**
+ * アメリカン・エキスプレス
+ * 想定形式: 日付,説明,金額,海外利用額,換算レート,処理日... (形式は可変なため、キーワード探索で実装)
+ * アメックスCSVは "日付", "内容", "金額" 等が含まれる
+ */
+function parseAmexCsv(lines: string[], bankAccountId: string): ParseResult {
+    // アメックスはGUIでダウンロードできるCSVがシンプルな場合が多いが、
+    // ここでは一般的なカラム構成を探索するロジックにする。
+    return parseGenericCardCsv(lines, bankAccountId);
+}
+
+/**
+ * 汎用カードパーサー
+ * 基本構成: 日付, 内容, 金額, (処理日), (外貨額), (レート)
+ * TSV（タブ区切り）にも対応
+ */
+function parseGenericCardCsv(lines: string[], bankAccountId: string): ParseResult {
+    const result: ParseResult = { success: true, transactions: [], errors: [], skippedRows: 0 };
+
+    // 区切り文字を判定（最初の数行を見てタブが含まれていればTSVとみなす）
+    // ただし、明らかなCSV（カンマが多い）ならCSV
+    let separator = ',';
+    const sampleLine = lines.find(l => l.includes('\t') || l.includes(','));
+    if (sampleLine && sampleLine.includes('\t') && !sampleLine.includes(',')) {
+        separator = '\t';
+    } else if (sampleLine && sampleLine.includes('\t') && (sampleLine.match(/,/g)?.length || 0) < (sampleLine.match(/\t/g)?.length || 0)) {
+        // タブの方が多い場合もTSVとする（Excelコピペなど）
+        separator = '\t';
+    }
+
+    // ヘッダー行を探す
+    let headerIndex = -1;
+    let colMap: Record<string, number> = {};
+
+    // 一般的なヘッダー名で列を特定
+    // 一般的なヘッダー名で列を特定
+    const keywords = {
+        date: ['利用日', '日付', 'Date', 'ご利用日'],
+        description: ['利用店名', '商品名', '摘要', '内容', 'Description', 'ご利用内容'],
+        amount: ['利用金額', '金額', 'Amount'],
+        processing_date: ['処理日', 'データ処理日', 'Process Date'],
+        foreign_amount: ['現地利用額', '外貨金額', 'Foreign Amount', '海外通貨利用金額'],
+        rate: ['換算レート', 'レート', 'Exchange Rate']
+    };
+
+    for (let i = 0; i < Math.min(20, lines.length); i++) {
+        const cols = separator === '\t' ? lines[i].split('\t') : parseCsvLine(lines[i]);
+        const headers = cols.map(c => c.trim());
+        const map: Record<string, number> = {};
+        let score = 0;
+
+        // 各フィールドごとに列を探す（完全一致優先）
+        const findCol = (fieldKeywords: string[]) => {
+            // 完全一致
+            let idx = headers.findIndex(h => fieldKeywords.some(k => h === k));
+            if (idx !== -1) return idx;
+            // 部分一致
+            return headers.findIndex(h => fieldKeywords.some(k => h.includes(k)));
+        };
+
+        const dateIdx = findCol(keywords.date);
+        if (dateIdx !== -1) { map.date = dateIdx; score++; }
+
+        const amountIdx = findCol(keywords.amount);
+        if (amountIdx !== -1) { map.amount = amountIdx; score++; }
+
+        // 内容（Description）は誤判定しやすいので、日付や金額で使われた列は除外したいが、
+        // findIndexは最初に見つかったものを返すので、重複する場合は後で調整が必要。
+        // ここでは単純に探す。
+        const descIdx = findCol(keywords.description);
+        if (descIdx !== -1 && descIdx !== dateIdx && descIdx !== amountIdx) {
+            map.description = descIdx;
+            score++;
+        } else if (descIdx !== -1) {
+            // すでに取られている場合、別の候補を探す必要があるが、
+            // 簡易的に「内容」は必須キーワードなので、もし被っていたら
+            // ヘッダー行ではない可能性が高い（同じ列名が複数ある場合を除く）
+        }
+
+        const procDateIdx = findCol(keywords.processing_date);
+        if (procDateIdx !== -1 && procDateIdx !== dateIdx) { map.processing_date = procDateIdx; } // processing_dateはscoreに加えない（必須ではない）
+
+        const foreignAmountIdx = findCol(keywords.foreign_amount);
+        if (foreignAmountIdx !== -1) { map.foreign_amount = foreignAmountIdx; }
+
+        const rateIdx = findCol(keywords.rate);
+        if (rateIdx !== -1) { map.rate = rateIdx; }
+
+        if (score >= 2) { // 日付と金額（または内容）が見つかればヘッダーとみなす
+            headerIndex = i;
+            colMap = map;
+            break;
+        }
+    }
+
+    if (headerIndex === -1) {
+        // ヘッダーが見つからない場合、汎用銀行CSVパーサーに委譲
+        return parseGenericCsv(lines, bankAccountId);
+    }
+
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+        const cols = separator === '\t' ? lines[i].split('\t') : parseCsvLine(lines[i]);
+        if (cols.length <= Math.max(...Object.values(colMap))) {
+            result.skippedRows++;
+            continue;
+        }
+
+        if (colMap.date === undefined || !normalizeDate(cols[colMap.date])) {
+            result.skippedRows++;
+            continue;
+        }
+
+        const date = normalizeDate(cols[colMap.date])!;
+        const description = (colMap.description !== undefined) ? cols[colMap.description] : '';
+
+        let amountStr = (colMap.amount !== undefined) ? cols[colMap.amount] : '0';
+        let amount = parseAmount(amountStr);
+
+        // カード明細の場合、通常は正の値が請求（出金）
+        // ただし、もしCSV内で貸方/借方が分かれている、あるいは符号で表現されている場合は調整が必要
+        // ここでは「正＝利用（出金）」と仮定する。マイナスなら返金（入金）。
+        // ※アメックスなどは返金がマイナスで表現されることが多い
+        let withdrawal = 0;
+        let deposit = 0;
+
+        // 金額文字列にマイナスが含まれているかチェック (parseAmountは絶対値を返すため元の文字列を確認)
+        if (amountStr.includes('-')) {
+            deposit = amount; // マイナスは返金(入金)扱い
+        } else {
+            withdrawal = amount;
+        }
+
+        const processingDate = (colMap.processing_date !== undefined) ? normalizeDate(cols[colMap.processing_date]) : null;
+        const foreignAmount = (colMap.foreign_amount !== undefined) ? parseAmount(cols[colMap.foreign_amount]) : null;
+        const rate = (colMap.rate !== undefined) ? parseFloat(cols[colMap.rate].replace(/[^0-9.]/g, '')) : null;
+
+        const transaction: ParsedTransaction = {
+            transaction_date: date,
+            description: description,
+            withdrawal: withdrawal,
+            deposit: deposit,
+            balance: null,
+            import_hash: '',
+            processing_date: processingDate,
+            foreign_currency_amount: foreignAmount,
+            exchange_rate: isNaN(rate || NaN) ? null : rate
+        };
+
+        transaction.import_hash = generateHash(bankAccountId, date, transaction.description, transaction.withdrawal, transaction.deposit);
+        result.transactions.push(transaction);
+    }
+
+    return result;
+}
+
 function parseGenericCsv(lines: string[], bankAccountId: string): ParseResult {
     const result: ParseResult = { success: true, transactions: [], errors: [], skippedRows: 0 };
 
@@ -479,6 +705,9 @@ export function getBankTypeName(bankType: BankType): string {
         PAYPAY: 'PayPay銀行',
         GMO_AOZORA: 'GMOあおぞらネット銀行',
         OTHER: 'その他',
+        RAKUTEN_CARD: '楽天カード',
+        AMEX: 'アメリカン・エキスプレス',
+        OTHER_CARD: 'その他カード',
     };
     return names[bankType];
 }

@@ -33,7 +33,7 @@ export type SalesStatus = 'UNPAID' | 'PAID';
 /**
  * 銀行種別
  */
-export type BankType = 'MUFG' | 'SMBC' | 'MIZUHO' | 'YUCHO' | 'RAKUTEN' | 'PAYPAY' | 'GMO_AOZORA' | 'OTHER';
+export type BankType = 'MUFG' | 'SMBC' | 'MIZUHO' | 'YUCHO' | 'RAKUTEN' | 'PAYPAY' | 'GMO_AOZORA' | 'RAKUTEN_CARD' | 'AMEX' | 'OTHER_CARD' | 'OTHER';
 
 /**
  * 売上チャネル
@@ -44,6 +44,11 @@ export type SalesChannel = 'DIRECT' | 'REFERRAL' | 'SNS' | 'WEBSITE' | 'PLATFORM
  * 口座カテゴリ
  */
 export type AccountCategory = 'BUSINESS' | 'PERSONAL';
+
+/**
+ * 口座種別 (銀行口座 / クレジットカード)
+ */
+export type AccountType = 'BANK' | 'CREDIT_CARD';
 
 // ============================================
 // Database Interface (supabase gen types 互換)
@@ -179,6 +184,7 @@ export interface Database {
           initial_balance: number;
           is_active: boolean;
           category: AccountCategory;
+          account_type: AccountType;
           user_id: string;
         };
         Insert: {
@@ -192,6 +198,7 @@ export interface Database {
           initial_balance?: number;
           is_active?: boolean;
           category?: AccountCategory;
+          account_type?: AccountType;
           user_id: string;
         };
         Update: {
@@ -205,6 +212,7 @@ export interface Database {
           initial_balance?: number;
           is_active?: boolean;
           category?: AccountCategory;
+          account_type?: AccountType;
           user_id?: string;
         };
         Relationships: [
@@ -229,6 +237,9 @@ export interface Database {
           import_hash: string | null;
           linked_expense_id: string | null;
           linked_sale_id: string | null;
+          processing_date: string | null;
+          foreign_currency_amount: number | null;
+          exchange_rate: number | null;
           user_id: string;
         };
         Insert: {
@@ -243,6 +254,9 @@ export interface Database {
           import_hash?: string | null;
           linked_expense_id?: string | null;
           linked_sale_id?: string | null;
+          processing_date?: string | null;
+          foreign_currency_amount?: number | null;
+          exchange_rate?: number | null;
           user_id: string;
         };
         Update: {
@@ -257,6 +271,9 @@ export interface Database {
           import_hash?: string | null;
           linked_expense_id?: string | null;
           linked_sale_id?: string | null;
+          processing_date?: string | null;
+          foreign_currency_amount?: number | null;
+          exchange_rate?: number | null;
           user_id?: string;
         };
         Relationships: [

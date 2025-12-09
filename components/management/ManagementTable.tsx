@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User, FileCheck, Eye, Download } from 'lucide-react';
-import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory, Document } from '@/types/supabase';
+import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory, Document, AccountType } from '@/types/supabase';
 import { CsvExportButton } from './CsvExportButton';
 import { BankAccountForm } from '@/components/bank/BankAccountForm';
 import { EditExpenseDialog } from './EditExpenseDialog';
@@ -56,6 +56,7 @@ export function ManagementTable({
     const [filterChannel, setFilterChannel] = useState<string>('ALL');
     const [filterBankAccount, setFilterBankAccount] = useState<string>('ALL');
     const [filterAccountCategory, setFilterAccountCategory] = useState<AccountCategory | 'ALL'>('ALL');
+    const [filterAccountType, setFilterAccountType] = useState<AccountType | 'ALL'>('ALL');
     const [filterDocumentType, setFilterDocumentType] = useState<string>('ALL');
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
     const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
@@ -161,16 +162,32 @@ export function ManagementTable({
     };
 
     const handleDeleteBankAccount = async (id: string) => {
-        if (!confirm('この口座を削除しますか？関連する取引も削除されます。')) return;
+        if (!confirm('この口座を削除しますか？関連する取引もすべて削除されます。')) return;
 
-        const supabase = createClient();
-        const { error } = await supabase.from('bank_accounts').delete().eq('id', id);
-        if (!error) {
+        try {
+            const supabase = createClient();
+
+            // 外部キーがCASCADE設定なので、bank_accountsを削除すれば関連データも自動削除される
+            const { error, count } = await supabase
+                .from('bank_accounts')
+                .delete()
+                .eq('id', id)
+                .select();
+
+            if (error) {
+                console.error('Delete error:', error);
+                alert('削除に失敗しました: ' + error.message);
+                return;
+            }
+
+            // UIを更新
             setBankAccounts(prev => prev.filter(a => a.id !== id));
             setBankTransactions(prev => prev.filter(t => t.bank_account_id !== id));
             setCsvImports(prev => prev.filter(i => i.bank_account_id !== id));
-        } else {
-            alert('削除に失敗しました');
+            alert('口座を削除しました');
+        } catch (err) {
+            console.error('Unexpected error:', err);
+            alert('予期しないエラーが発生しました');
         }
     };
 
@@ -260,12 +277,15 @@ export function ManagementTable({
         return matchesFiscalYear && matchesDept && matchesChannel;
     });
 
-    // Filter bank accounts by category
+    // Filter bank accounts by category and type
     const filteredBankAccounts = bankAccounts.filter((account) => {
         const matchesCategory = filterAccountCategory !== 'ALL'
             ? (account.category || 'BUSINESS') === filterAccountCategory
             : true;
-        return matchesCategory;
+        const matchesType = filterAccountType !== 'ALL'
+            ? (account.account_type || 'BANK') === filterAccountType
+            : true;
+        return matchesCategory && matchesType;
     });
 
     // Filter bank transactions by account and fiscal year
@@ -281,7 +301,10 @@ export function ManagementTable({
         const matchesCategory = filterAccountCategory !== 'ALL'
             ? (account?.category || 'BUSINESS') === filterAccountCategory
             : true;
-        return matchesFiscalYear && matchesAccount && matchesCategory;
+        const matchesType = filterAccountType !== 'ALL'
+            ? (account?.account_type || 'BANK') === filterAccountType
+            : true;
+        return matchesFiscalYear && matchesAccount && matchesCategory && matchesType;
     });
 
     // Filter documents by type
@@ -406,43 +429,75 @@ export function ManagementTable({
                     )}
 
                     {(viewType === 'bank_accounts' || viewType === 'bank_transactions') && (
-                        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                            <button
-                                type="button"
-                                onClick={() => setFilterAccountCategory('ALL')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                                    filterAccountCategory === 'ALL'
+                        <>
+                            <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountCategory('ALL')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountCategory === 'ALL'
                                         ? 'bg-white dark:bg-gray-700 shadow-sm'
                                         : 'hover:bg-gray-200 dark:hover:bg-gray-700'
-                                }`}
-                            >
-                                全て
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setFilterAccountCategory('BUSINESS')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                                    filterAccountCategory === 'BUSINESS'
+                                        }`}
+                                >
+                                    カテゴリ全
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountCategory('BUSINESS')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountCategory === 'BUSINESS'
                                         ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 shadow-sm'
                                         : 'hover:bg-gray-200 dark:hover:bg-gray-700'
-                                }`}
-                            >
-                                <Briefcase className="h-3.5 w-3.5" />
-                                ビジネス
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setFilterAccountCategory('PERSONAL')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                                    filterAccountCategory === 'PERSONAL'
+                                        }`}
+                                >
+                                    <Briefcase className="h-3.5 w-3.5" />
+                                    ビジネス
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountCategory('PERSONAL')}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountCategory === 'PERSONAL'
                                         ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 shadow-sm'
                                         : 'hover:bg-gray-200 dark:hover:bg-gray-700'
-                                }`}
-                            >
-                                <User className="h-3.5 w-3.5" />
-                                個人
-                            </button>
-                        </div>
+                                        }`}
+                                >
+                                    <User className="h-3.5 w-3.5" />
+                                    個人
+                                </button>
+                            </div>
+
+                            <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountType('ALL')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountType === 'ALL'
+                                        ? 'bg-white dark:bg-gray-700 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    種別全
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountType('BANK')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountType === 'BANK'
+                                        ? 'bg-white dark:bg-gray-700 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    銀行
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterAccountType('CREDIT_CARD')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterAccountType === 'CREDIT_CARD'
+                                        ? 'bg-white dark:bg-gray-700 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    カード
+                                </button>
+                            </div>
+                        </>
                     )}
 
                     {viewType === 'bank_transactions' && bankAccounts.length > 0 && (
@@ -524,11 +579,10 @@ export function ManagementTable({
             {viewType === 'bank_accounts' && (
                 <div className="text-right text-sm text-gray-600">
                     {filterAccountCategory !== 'ALL' && (
-                        <span className={`mr-2 px-2 py-0.5 rounded text-xs ${
-                            filterAccountCategory === 'BUSINESS'
-                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
-                        }`}>
+                        <span className={`mr-2 px-2 py-0.5 rounded text-xs ${filterAccountCategory === 'BUSINESS'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                            }`}>
                             {filterAccountCategory === 'BUSINESS' ? 'ビジネス' : '個人'}
                         </span>
                     )}
@@ -540,8 +594,11 @@ export function ManagementTable({
             )}
             {viewType === 'bank_transactions' && (
                 <div className="text-right text-sm text-gray-600">
-                    {filteredBankTransactions.length}件 / 入金: <span className="text-green-600 font-bold">¥{transactionsDeposit.toLocaleString()}</span>
-                    {' / '}出金: <span className="text-red-600 font-bold">¥{transactionsWithdrawal.toLocaleString()}</span>
+                    {filteredBankTransactions.length}件
+                    {filterAccountType !== 'CREDIT_CARD' && (
+                        <> / 入金: <span className="text-green-600 font-bold">¥{transactionsDeposit.toLocaleString()}</span></>
+                    )}
+                    {' / '}{filterAccountType === 'CREDIT_CARD' ? '利用' : '出金'}: <span className="text-red-600 font-bold">¥{transactionsWithdrawal.toLocaleString()}</span>
                 </div>
             )}
             {viewType === 'documents' && (
@@ -581,91 +638,91 @@ export function ManagementTable({
                                 filteredExpenses.map((item) => {
                                     const files = parseFilePaths(item.file_path);
                                     return (
-                                    <TableRow key={item.id} className={
-                                        item.ai_check_status === 'WARNING'
-                                            ? 'bg-red-50 dark:bg-red-900/20'
-                                            : ''
-                                    }>
-                                        <TableCell>
-                                            {files.length === 0 ? (
-                                                <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
-                                                    <span className="text-gray-400 text-xs">なし</span>
+                                        <TableRow key={item.id} className={
+                                            item.ai_check_status === 'WARNING'
+                                                ? 'bg-red-50 dark:bg-red-900/20'
+                                                : ''
+                                        }>
+                                            <TableCell>
+                                                {files.length === 0 ? (
+                                                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
+                                                        <span className="text-gray-400 text-xs">なし</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex gap-1">
+                                                        {files.slice(0, 3).map((file, idx) => {
+                                                            const fileUrl = getFileUrl(file);
+                                                            const isPdf = file.toLowerCase().endsWith('.pdf');
+                                                            return (
+                                                                <a
+                                                                    key={idx}
+                                                                    href={fileUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="relative block w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
+                                                                    title={`ファイル ${idx + 1} を開く`}
+                                                                >
+                                                                    {isPdf ? (
+                                                                        <iframe
+                                                                            src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                                                                            className="w-full h-full border-0 scale-100 origin-top-left"
+                                                                            title={`領収書 ${idx + 1}`}
+                                                                        />
+                                                                    ) : (
+                                                                        <img
+                                                                            src={fileUrl}
+                                                                            alt={`領収書 ${idx + 1}`}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    )}
+                                                                    {/* Clickable overlay to prevent browser controls and enable link */}
+                                                                    <span className="absolute inset-0 z-10" />
+                                                                </a>
+                                                            );
+                                                        })}
+                                                        {files.length > 3 && (
+                                                            <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
+                                                                <span className="text-xs text-gray-600 dark:text-gray-300">+{files.length - 3}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>{item.transaction_date}</TableCell>
+                                            <TableCell>
+                                                <DepartmentBadge department={item.department} />
+                                            </TableCell>
+                                            <TableCell>{item.account_item}</TableCell>
+                                            <TableCell className="max-w-[200px] truncate" title={item.description || ''}>
+                                                {item.description || '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">
+                                                ¥{item.amount.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center" title={item.ai_audit_note || ''}>
+                                                    {getStatusIcon(item.ai_check_status)}
                                                 </div>
-                                            ) : (
-                                                <div className="flex gap-1">
-                                                    {files.slice(0, 3).map((file, idx) => {
-                                                        const fileUrl = getFileUrl(file);
-                                                        const isPdf = file.toLowerCase().endsWith('.pdf');
-                                                        return (
-                                                            <a
-                                                                key={idx}
-                                                                href={fileUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="relative block w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
-                                                                title={`ファイル ${idx + 1} を開く`}
-                                                            >
-                                                                {isPdf ? (
-                                                                    <iframe
-                                                                        src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                                                                        className="w-full h-full border-0 scale-100 origin-top-left"
-                                                                        title={`領収書 ${idx + 1}`}
-                                                                    />
-                                                                ) : (
-                                                                    <img
-                                                                        src={fileUrl}
-                                                                        alt={`領収書 ${idx + 1}`}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                )}
-                                                                {/* Clickable overlay to prevent browser controls and enable link */}
-                                                                <span className="absolute inset-0 z-10" />
-                                                            </a>
-                                                        );
-                                                    })}
-                                                    {files.length > 3 && (
-                                                        <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
-                                                            <span className="text-xs text-gray-600 dark:text-gray-300">+{files.length - 3}</span>
-                                                        </div>
-                                                    )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleEditExpense(item)}
+                                                    >
+                                                        <Pencil className="h-4 w-4 text-gray-500" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteExpense(item.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                                    </Button>
                                                 </div>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{item.transaction_date}</TableCell>
-                                        <TableCell>
-                                            <DepartmentBadge department={item.department} />
-                                        </TableCell>
-                                        <TableCell>{item.account_item}</TableCell>
-                                        <TableCell className="max-w-[200px] truncate" title={item.description || ''}>
-                                            {item.description || '-'}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">
-                                            ¥{item.amount.toLocaleString()}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            <div className="flex justify-center" title={item.ai_audit_note || ''}>
-                                                {getStatusIcon(item.ai_check_status)}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            <div className="flex justify-center gap-1">
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleEditExpense(item)}
-                                                >
-                                                    <Pencil className="h-4 w-4 text-gray-500" />
-                                                </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleDeleteExpense(item.id)}
-                                                >
-                                                    <Trash2 className="h-4 w-4 text-red-500" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
+                                            </TableCell>
+                                        </TableRow>
                                     );
                                 })
                             )}
@@ -825,11 +882,10 @@ export function ManagementTable({
                                         <TableRow key={account.id}>
                                             <TableCell className="font-medium">{account.name}</TableCell>
                                             <TableCell>
-                                                <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${
-                                                    category === 'BUSINESS'
-                                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                                                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                                                }`}>
+                                                <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${category === 'BUSINESS'
+                                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                                    : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                                    }`}>
                                                     {category === 'BUSINESS' ? (
                                                         <><Briefcase className="h-3 w-3" />ビジネス</>
                                                     ) : (
@@ -898,18 +954,29 @@ export function ManagementTable({
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>取引日</TableHead>
+                                <TableHead>{filterAccountType === 'CREDIT_CARD' ? 'ご利用日' : '取引日'}</TableHead>
+                                {filterAccountType === 'CREDIT_CARD' && <TableHead>データ処理日</TableHead>}
+                                {filterAccountType === 'CREDIT_CARD' ? <TableHead>ご利用内容</TableHead> : null}
                                 <TableHead>口座</TableHead>
-                                <TableHead>摘要</TableHead>
-                                <TableHead className="text-right">入金</TableHead>
-                                <TableHead className="text-right">出金</TableHead>
-                                <TableHead className="text-right">残高</TableHead>
+                                {filterAccountType !== 'CREDIT_CARD' ? <TableHead>摘要</TableHead> : null}
+                                <TableHead className="text-right">{filterAccountType === 'CREDIT_CARD' ? '金額' : '入金'}</TableHead>
+                                {filterAccountType === 'CREDIT_CARD' ? (
+                                    <>
+                                        <TableHead className="text-right">海外金額</TableHead>
+                                        <TableHead className="text-right">レート</TableHead>
+                                    </>
+                                ) : (
+                                    <>
+                                        <TableHead className="text-right">出金</TableHead>
+                                        <TableHead className="text-right">残高</TableHead>
+                                    </>
+                                )}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filteredBankTransactions.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center h-24">
+                                    <TableCell colSpan={filterAccountType === 'CREDIT_CARD' ? 7 : 6} className="text-center h-24">
                                         取引データが見つかりません。
                                     </TableCell>
                                 </TableRow>
@@ -919,30 +986,56 @@ export function ManagementTable({
                                     return (
                                         <TableRow key={item.id}>
                                             <TableCell>{item.transaction_date}</TableCell>
+                                            {filterAccountType === 'CREDIT_CARD' && (
+                                                <TableCell>{item.processing_date || '-'}</TableCell>
+                                            )}
+                                            {filterAccountType === 'CREDIT_CARD' && (
+                                                <TableCell className="max-w-[250px] truncate" title={item.description}>
+                                                    {item.description}
+                                                </TableCell>
+                                            )}
                                             <TableCell>
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                                        accountInfo.category === 'BUSINESS'
-                                                            ? 'bg-blue-500'
-                                                            : 'bg-purple-500'
-                                                    }`} title={accountInfo.category === 'BUSINESS' ? 'ビジネス' : '個人'} />
+                                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${accountInfo.category === 'BUSINESS'
+                                                        ? 'bg-blue-500'
+                                                        : 'bg-purple-500'
+                                                        }`} title={accountInfo.category === 'BUSINESS' ? 'ビジネス' : '個人'} />
                                                     <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
                                                         {accountInfo.name}
                                                     </span>
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="max-w-[250px] truncate" title={item.description}>
-                                                {item.description}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono text-green-600">
-                                                {item.deposit > 0 ? `¥${item.deposit.toLocaleString()}` : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono text-red-600">
-                                                {item.withdrawal > 0 ? `¥${item.withdrawal.toLocaleString()}` : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-right font-mono">
-                                                {item.balance !== null ? `¥${item.balance.toLocaleString()}` : '-'}
-                                            </TableCell>
+                                            {filterAccountType !== 'CREDIT_CARD' && (
+                                                <TableCell className="max-w-[250px] truncate" title={item.description}>
+                                                    {item.description}
+                                                </TableCell>
+                                            )}
+
+                                            {filterAccountType === 'CREDIT_CARD' ? (
+                                                <>
+                                                    <TableCell className="text-right font-mono text-red-600">
+                                                        {item.withdrawal > 0 ? `¥${item.withdrawal.toLocaleString()}` : (item.deposit > 0 ? `(返金) ¥${item.deposit.toLocaleString()}` : '-')}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono text-gray-600">
+                                                        {item.foreign_currency_amount ? item.foreign_currency_amount.toLocaleString() : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono text-gray-600">
+                                                        {item.exchange_rate ? item.exchange_rate.toLocaleString() : '-'}
+                                                    </TableCell>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <TableCell className="text-right font-mono text-green-600">
+                                                        {item.deposit > 0 ? `¥${item.deposit.toLocaleString()}` : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono text-red-600">
+                                                        {item.withdrawal > 0 ? `¥${item.withdrawal.toLocaleString()}` : '-'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-mono">
+                                                        {item.balance !== null ? `¥${item.balance.toLocaleString()}` : '-'}
+                                                    </TableCell>
+                                                </>
+                                            )}
                                         </TableRow>
                                     );
                                 })

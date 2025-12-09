@@ -37,6 +37,7 @@ export function CsvImportDialog({
 }: CsvImportDialogProps) {
     const [internalOpen, setInternalOpen] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const [result, setResult] = useState<ImportResult | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,10 +46,7 @@ export function CsvImportDialog({
     const open = isControlled ? controlledOpen : internalOpen;
     const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const processFile = async (file: File) => {
         setIsUploading(true);
         setResult(null);
 
@@ -97,6 +95,40 @@ export function CsvImportDialog({
         }
     };
 
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await processFile(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.name.toLowerCase().endsWith('.csv')) {
+            await processFile(file);
+        } else if (file) {
+            setResult({
+                success: false,
+                message: 'CSVファイルのみアップロード可能です',
+            });
+        }
+    };
+
     const handleClose = () => {
         setOpen(false);
         setResult(null);
@@ -123,7 +155,15 @@ export function CsvImportDialog({
                         <p className="text-xs">対応形式: {account.bank_type === 'RAKUTEN' ? 'UTF-8' : 'Shift-JIS'}</p>
                     </div>
 
-                    <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                    <div
+                        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${isDragging
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
+                            }`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -146,7 +186,7 @@ export function CsvImportDialog({
                                 <>
                                     <Upload className="h-10 w-10 text-gray-400 mb-2" />
                                     <span className="text-sm text-gray-500">
-                                        クリックしてCSVを選択
+                                        クリックまたはドラッグ＆ドロップでCSVを選択
                                     </span>
                                 </>
                             )}
@@ -154,9 +194,8 @@ export function CsvImportDialog({
                     </div>
 
                     {result && (
-                        <div className={`rounded-lg p-4 ${
-                            result.success ? 'bg-green-50' : 'bg-red-50'
-                        }`}>
+                        <div className={`rounded-lg p-4 ${result.success ? 'bg-green-50' : 'bg-red-50'
+                            }`}>
                             <div className="flex items-start">
                                 {result.success ? (
                                     <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5" />
@@ -164,9 +203,8 @@ export function CsvImportDialog({
                                     <AlertCircle className="h-5 w-5 text-red-500 mr-2 mt-0.5" />
                                 )}
                                 <div>
-                                    <p className={`font-medium ${
-                                        result.success ? 'text-green-800' : 'text-red-800'
-                                    }`}>
+                                    <p className={`font-medium ${result.success ? 'text-green-800' : 'text-red-800'
+                                        }`}>
                                         {result.message}
                                     </p>
                                     {result.success && result.imported !== undefined && (
