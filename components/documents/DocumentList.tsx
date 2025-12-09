@@ -146,16 +146,17 @@ export function DocumentList({ documents, onDelete }: DocumentListProps) {
                                     <img
                                         src={doc.file_path}
                                         alt={doc.title}
-                                        className="w-full h-full object-contain bg-white"
+                                        className="w-full h-full object-contain bg-white pointer-events-none"
+                                        draggable={false}
                                     />
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center z-10">
                                         <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
                                     </div>
                                 </>
                             ) : isPdfFile(doc.file_type) ? (
                                 <>
                                     <PdfThumbnail url={doc.file_path} className="w-full h-full bg-white" />
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center z-30">
                                         <Eye className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
                                     </div>
                                 </>

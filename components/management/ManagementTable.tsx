@@ -560,13 +560,13 @@ export function ManagementTable({
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead>領収書</TableHead>
                                 <TableHead>取引日</TableHead>
                                 <TableHead>事業区分</TableHead>
                                 <TableHead>勘定科目</TableHead>
                                 <TableHead>摘要</TableHead>
                                 <TableHead className="text-right">金額</TableHead>
                                 <TableHead className="text-center">AI監査</TableHead>
-                                <TableHead className="text-center">ファイル</TableHead>
                                 <TableHead className="text-center">操作</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -578,12 +578,59 @@ export function ManagementTable({
                                     </TableCell>
                                 </TableRow>
                             ) : (
-                                filteredExpenses.map((item) => (
+                                filteredExpenses.map((item) => {
+                                    const files = parseFilePaths(item.file_path);
+                                    return (
                                     <TableRow key={item.id} className={
                                         item.ai_check_status === 'WARNING'
                                             ? 'bg-red-50 dark:bg-red-900/20'
                                             : ''
                                     }>
+                                        <TableCell>
+                                            {files.length === 0 ? (
+                                                <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center">
+                                                    <span className="text-gray-400 text-xs">なし</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-1">
+                                                    {files.slice(0, 3).map((file, idx) => {
+                                                        const fileUrl = getFileUrl(file);
+                                                        const isPdf = file.toLowerCase().endsWith('.pdf');
+                                                        return (
+                                                            <a
+                                                                key={idx}
+                                                                href={fileUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="relative block w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
+                                                                title={`ファイル ${idx + 1} を開く`}
+                                                            >
+                                                                {isPdf ? (
+                                                                    <iframe
+                                                                        src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                                                                        className="w-full h-full border-0 scale-100 origin-top-left"
+                                                                        title={`領収書 ${idx + 1}`}
+                                                                    />
+                                                                ) : (
+                                                                    <img
+                                                                        src={fileUrl}
+                                                                        alt={`領収書 ${idx + 1}`}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                )}
+                                                                {/* Clickable overlay to prevent browser controls and enable link */}
+                                                                <span className="absolute inset-0 z-10" />
+                                                            </a>
+                                                        );
+                                                    })}
+                                                    {files.length > 3 && (
+                                                        <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
+                                                            <span className="text-xs text-gray-600 dark:text-gray-300">+{files.length - 3}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </TableCell>
                                         <TableCell>{item.transaction_date}</TableCell>
                                         <TableCell>
                                             <DepartmentBadge department={item.department} />
@@ -599,44 +646,6 @@ export function ManagementTable({
                                             <div className="flex justify-center" title={item.ai_audit_note || ''}>
                                                 {getStatusIcon(item.ai_check_status)}
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {(() => {
-                                                const files = parseFilePaths(item.file_path);
-                                                if (files.length === 0) {
-                                                    return <span className="text-gray-300">-</span>;
-                                                }
-                                                if (files.length === 1) {
-                                                    return (
-                                                        <a
-                                                            href={getFileUrl(files[0])}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex items-center text-blue-600 hover:text-blue-800"
-                                                            title="ファイルをダウンロード"
-                                                        >
-                                                            <FileDown className="h-4 w-4" />
-                                                        </a>
-                                                    );
-                                                }
-                                                return (
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        {files.map((file, idx) => (
-                                                            <a
-                                                                key={idx}
-                                                                href={getFileUrl(file)}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center text-blue-600 hover:text-blue-800"
-                                                                title={`ファイル ${idx + 1}`}
-                                                            >
-                                                                <FileDown className="h-3 w-3" />
-                                                            </a>
-                                                        ))}
-                                                        <span className="text-xs text-gray-500 ml-1">({files.length})</span>
-                                                    </div>
-                                                );
-                                            })()}
                                         </TableCell>
                                         <TableCell className="text-center">
                                             <div className="flex justify-center gap-1">
@@ -657,7 +666,8 @@ export function ManagementTable({
                                             </div>
                                         </TableCell>
                                     </TableRow>
-                                ))
+                                    );
+                                })
                             )}
                         </TableBody>
                     </Table>
@@ -970,11 +980,16 @@ export function ManagementTable({
                                     return (
                                         <TableRow key={doc.id} className={isExpired ? 'bg-red-50 dark:bg-red-900/20' : ''}>
                                             <TableCell>
-                                                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex items-center justify-center">
+                                                <a
+                                                    href={fileUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="relative block w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all"
+                                                >
                                                     {isPdf ? (
                                                         <iframe
-                                                            src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                                                            className="w-full h-full border-0 pointer-events-none"
+                                                            src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                                                            className="w-full h-full border-0"
                                                             title={doc.title}
                                                         />
                                                     ) : (
@@ -984,7 +999,9 @@ export function ManagementTable({
                                                             className="w-full h-full object-cover"
                                                         />
                                                     )}
-                                                </div>
+                                                    {/* Clickable overlay */}
+                                                    <span className="absolute inset-0 z-10" />
+                                                </a>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="font-medium">{doc.title}</div>

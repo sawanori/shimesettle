@@ -29,7 +29,7 @@ export function PdfThumbnail({ url, className = '' }: PdfThumbnailProps) {
                 </div>
             )}
             <iframe
-                src={`${url}#toolbar=0&navpanes=0&scrollbar=0`}
+                src={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
                 className="w-full h-full border-0 pointer-events-none"
                 onLoad={() => setIsLoading(false)}
                 onError={() => {
@@ -42,6 +42,8 @@ export function PdfThumbnail({ url, className = '' }: PdfThumbnailProps) {
                     transformOrigin: 'top left'
                 }}
             />
+            {/* Overlay to prevent browser controls on hover */}
+            <div className="absolute inset-0 bg-transparent z-20" />
         </div>
     );
 }
