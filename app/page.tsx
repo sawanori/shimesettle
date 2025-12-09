@@ -118,42 +118,46 @@ export default async function Home() {
                             {getFiscalYearLabel(fiscalYear)}
                         </p>
                     </div>
-                    <div className="grid grid-cols-3 sm:flex gap-2 sm:gap-4">
-                        <Link href="/expenses">
-                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                <Receipt className="sm:mr-2 h-4 w-4" />
-                                <span className="hidden sm:inline">経費登録</span>
-                                <span className="sm:hidden text-xs">経費</span>
-                            </Button>
-                        </Link>
-                        <Link href="/sales">
-                            <Button className="w-full sm:w-auto" size="sm">
-                                <TrendingUp className="sm:mr-2 h-4 w-4" />
-                                <span className="hidden sm:inline">売上登録</span>
-                                <span className="sm:hidden text-xs">売上</span>
-                            </Button>
-                        </Link>
-                        <Link href="/bank">
-                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                <Building2 className="sm:mr-2 h-4 w-4" />
-                                <span className="hidden sm:inline">銀行</span>
-                                <span className="sm:hidden text-xs">銀行</span>
-                            </Button>
-                        </Link>
-                        <Link href="/documents">
-                            <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                <FileCheck className="sm:mr-2 h-4 w-4" />
-                                <span className="hidden sm:inline">書類</span>
-                                <span className="sm:hidden text-xs">書類</span>
-                            </Button>
-                        </Link>
-                        <Link href="/management" className="col-span-2 sm:col-span-1">
-                            <Button variant="ghost" className="w-full sm:w-auto" size="sm">
-                                <Settings className="sm:mr-2 h-4 w-4" />
-                                <span className="hidden sm:inline">管理</span>
-                                <span className="sm:hidden text-xs">管理</span>
-                            </Button>
-                        </Link>
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
+                        <div className="grid grid-cols-4 sm:flex gap-2 sm:gap-4 w-full sm:w-auto">
+                            <Link href="/expenses">
+                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                    <Receipt className="sm:mr-2 h-4 w-4" />
+                                    <span className="hidden sm:inline">経費登録</span>
+                                    <span className="sm:hidden text-xs">経費</span>
+                                </Button>
+                            </Link>
+                            <Link href="/sales">
+                                <Button className="w-full sm:w-auto" size="sm">
+                                    <TrendingUp className="sm:mr-2 h-4 w-4" />
+                                    <span className="hidden sm:inline">売上登録</span>
+                                    <span className="sm:hidden text-xs">売上</span>
+                                </Button>
+                            </Link>
+                            <Link href="/bank">
+                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                    <Building2 className="sm:mr-2 h-4 w-4" />
+                                    <span className="hidden sm:inline">銀行</span>
+                                    <span className="sm:hidden text-xs">銀行</span>
+                                </Button>
+                            </Link>
+                            <Link href="/documents">
+                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                    <FileCheck className="sm:mr-2 h-4 w-4" />
+                                    <span className="hidden sm:inline">書類</span>
+                                    <span className="sm:hidden text-xs">書類</span>
+                                </Button>
+                            </Link>
+                        </div>
+                        <div className="flex flex-col items-center sm:items-start">
+                            <Link href="/management">
+                                <Button variant="outline" className="bg-amber-50 border-amber-300 hover:bg-amber-100 text-amber-800" size="sm">
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    管理コンソール
+                                </Button>
+                            </Link>
+                            <span className="text-[10px] text-gray-500 mt-1">※税理士の方はこちらへ</span>
+                        </div>
                     </div>
                 </div>
 
