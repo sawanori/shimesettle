@@ -1,0 +1,140 @@
+project_tasks:
+  phase_0:
+    name: "環境構築と初期設定"
+    description: "開発の土台となるNext.jsプロジェクトとSupabaseクライアントのセットアップ"
+    tickets:
+      - id: "TICKET-001"
+        status: "DONE"
+        title: "Next.jsプロジェクトの初期化"
+        instructions: |
+          - `npx create-next-app@latest` でプロジェクトを作成。
+          - 設定: TypeScript=Yes, Tailwind CSS=Yes, App Router=Yes, ESLint=Yes, src directory=Yes, import alias=@/*
+          - 必要な依存パッケージを追加: `npm install @supabase/supabase-js lucide-react clsx tailwind-merge`
+        acceptance_criteria: "ローカルサーバー(npm run dev)が起動し、ブラウザでトップページが表示されること。"
+
+      - id: "TICKET-002"
+        status: "DONE"
+        title: "Supabaseクライアントの実装"
+        instructions: |
+          - `.env.local` ファイルを作成し、`NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` を設定。
+          - `utils/supabase/client.ts` (Client Component用) を作成。
+          - `utils/supabase/server.ts` (Server Component/Server Actions用) を作成。Cookie制御を含むこと。
+        acceptance_criteria: "Supabaseへの接続クライアントがインスタンス化でき、エラーが出ないこと。"
+
+      - id: "TICKET-003"
+        status: "DONE"
+        title: "UIコンポーネント (shadcn/ui) の導入"
+        instructions: |
+          - `npx shadcn@latest init` を実行。
+          - 以下のコンポーネントを追加インストール: `button`, `input`, `card`, `table`, `dialog`, `select`, `toast`, `calendar`, `form`, `label`
+        acceptance_criteria: "`components/ui` ディレクトリに各コンポーネントのファイルが生成されていること。"
+
+  phase_1:
+    name: "バックエンド構築 (Supabase)"
+    description: "データベースとRLS設定"
+    tickets:
+      - id: "TICKET-101"
+        status: "DONE"
+        title: "データベース・テーブル作成"
+        instructions: |
+          - Supabase SQLエディタで以下のテーブルを作成するSQLを実行。
+          - `expenses`: file_path, transaction_date, amount, department, account_item, description, ai_check_status 等
+          - `sales`: transaction_date, amount, client_name, department, status, file_path 等
+        acceptance_criteria: "Supabaseのダッシュボードで2つのテーブルが確認できること。"
+
+      - id: "TICKET-102"
+        status: "DONE"
+        title: "型定義 (TypeScript) の生成"
+        instructions: |
+          - Supabase CLI を使用して型定義を生成、または `types/supabase.ts` に手動で正確な型定義を作成。
+          - プロジェクト全体で `Database` 型を利用可能にする。
+        acceptance_criteria: "コード内で `Database['public']['Tables']['expenses']['Row']` 等が参照できること。"
+
+      - id: "TICKET-103"
+        status: "DONE"
+        title: "RLS (Row Level Security) の設定"
+        instructions: |
+          - `expenses` と `sales` テーブルのRLSを有効化 (Enable RLS)。
+          - ポリシー作成: `SELECT` は全認証ユーザー許可、`INSERT/UPDATE/DELETE` は自身のデータのみ許可(uidチェック)。
+        acceptance_criteria: "SQLでポリシーが適用されていること。"
+
+  phase_2:
+    name: "経費管理機能 (Core Features)"
+    description: "アップロード、AI-OCR、データ登録"
+    tickets:
+      - id: "TICKET-201"
+        status: "DONE"
+        title: "ファイルアップロードUI実装"
+        instructions: |
+          - ドラッグ＆ドロップエリアを作成。
+          - Supabase Storage (`receipts` バケット) へアップロードする処理を実装。
+        acceptance_criteria: "画像を選択し、Storageに保存され、公開URL(または署名付きURL)が取得できること。"
+
+      - id: "TICKET-202"
+        status: "DONE"
+        title: "OpenAI OCR APIの実装"
+        instructions: |
+          - `app/api/analyze-receipt/route.ts` を作成。
+          - `openai` パッケージを使用し、画像URLをgpt-4oに渡してJSON (日付, 金額, 支払先, 科目推論) を受け取る。
+        acceptance_criteria: "APIを叩くと、領収書画像の解析結果がJSONで返ってくること。"
+
+      - id: "TICKET-203"
+        status: "DONE"
+        title: "経費登録フォームと連携"
+        instructions: |
+          - OCR結果を初期値に入れたフォーム (`react-hook-form` + `zod`) を表示。
+          - ユーザーが修正して「登録」を押すと `expenses` テーブルにINSERTされる。
+        acceptance_criteria: "画像アップロード → AI解析 → フォーム確認 → 保存 の一連の流れが動作すること。"
+
+  phase_3:
+    name: "売上管理とダッシュボード"
+    description: "売上登録と経営状況の可視化"
+    tickets:
+      - id: "TICKET-301"
+        status: "DONE"
+        title: "売上登録機能の実装"
+        instructions: |
+          - `sales` テーブルへのデータ登録画面を作成。
+          - 必須項目: 売上日, 金額, 取引先, 事業区分(写真/動画/WEB)。
+        acceptance_criteria: "売上データがDBに保存されること。"
+        completed_at: "2024-12-07"
+        notes: |
+          - `components/sales/SalesForm.tsx` - 売上登録フォーム
+          - `app/sales/page.tsx` - 売上登録ページ
+          - 入金ステータス（UNPAID/PAID）も追加実装
+
+      - id: "TICKET-302"
+        status: "DONE"
+        title: "ダッシュボード集計とグラフ表示"
+        instructions: |
+          - Server Componentで `sales` と `expenses` を取得し、事業区分ごとの粗利を集計。
+          - `recharts` 等を使って「円グラフ(売上構成)」と「棒グラフ(収支)」を描画。
+        acceptance_criteria: "トップページで事業ごとの収支状況がグラフで見れること。"
+        completed_at: "2024-12-07"
+        notes: |
+          - `components/dashboard/SalesPieChart.tsx` - 事業別売上構成比（円グラフ）
+          - `components/dashboard/RevenueBarChart.tsx` - 事業別収支（棒グラフ）
+          - `components/dashboard/DashboardSummary.tsx` - サマリーカード
+          - `app/page.tsx` - ダッシュボード（Server Componentでデータ取得）
+          - rechartsパッケージを追加
+
+  phase_4:
+    name: "税理士用管理・出力機能"
+    description: "一覧表示、監査、CSV出力"
+    tickets:
+      - id: "TICKET-401"
+        status: "DONE"
+        title: "管理一覧とフィルタリング"
+        instructions: |
+          - 全データをテーブル表示。
+          - 年月、事業区分での絞り込み機能を実装。
+          - AI監査結果 (`ai_check_status`) が警告の行を視覚的に強調。
+        acceptance_criteria: "指定した条件でデータが正しく絞り込まれること。"
+
+      - id: "TICKET-402"
+        status: "DONE"
+        title: "CSVエクスポート機能"
+        instructions: |
+          - `iconv-lite` を使用し、Shift-JIS形式でCSVを生成してダウンロード。
+          - カラム順序: 取引日, 金額, 借方科目, 摘要, 部門(事業区分)。
+        acceptance_criteria: "ダウンロードしたCSVがExcelで文字化けせず開けること。"

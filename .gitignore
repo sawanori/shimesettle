@@ -36,6 +36,14 @@ yarn-error.log*
 # vercel
 .vercel
 
+# 銀行明細などの個人データ
+*.csv
+!sample*.csv
+
+# Playwright テスト成果物
+playwright-report/
+test-results/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

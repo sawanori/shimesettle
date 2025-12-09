@@ -1,0 +1,911 @@
+'use client';
+
+import { useState } from 'react';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User } from 'lucide-react';
+import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory } from '@/types/supabase';
+import { CsvExportButton } from './CsvExportButton';
+import { BankAccountForm } from '@/components/bank/BankAccountForm';
+import { EditExpenseDialog } from './EditExpenseDialog';
+import { EditSaleDialog } from './EditSaleDialog';
+import { getBankTypeName } from '@/lib/bankCsvParser';
+import { createClient } from '@/utils/supabase/client';
+import {
+    getCurrentFiscalYear,
+    getSelectableFiscalYears,
+    isInFiscalYear,
+} from '@/lib/fiscalYear';
+
+type ViewType = 'expenses' | 'sales' | 'bank_accounts' | 'bank_transactions';
+
+interface ManagementTableProps {
+    initialExpenses: Expense[];
+    initialSales: Sale[];
+    initialBankAccounts: BankAccount[];
+    initialBankTransactions: BankTransaction[];
+    initialCsvImports: CsvImport[];
+}
+
+export function ManagementTable({
+    initialExpenses,
+    initialSales,
+    initialBankAccounts,
+    initialBankTransactions,
+    initialCsvImports,
+}: ManagementTableProps) {
+    const [viewType, setViewType] = useState<ViewType>('expenses');
+    const [filterFiscalYear, setFilterFiscalYear] = useState<string>('ALL');
+    const [filterDepartment, setFilterDepartment] = useState<string>('ALL');
+    const [filterChannel, setFilterChannel] = useState<string>('ALL');
+    const [filterBankAccount, setFilterBankAccount] = useState<string>('ALL');
+    const [filterAccountCategory, setFilterAccountCategory] = useState<AccountCategory | 'ALL'>('ALL');
+    const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
+    const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
+    const [csvImports, setCsvImports] = useState(initialCsvImports);
+
+    // Edit state
+    const [expenses, setExpenses] = useState(initialExpenses);
+    const [sales, setSales] = useState(initialSales);
+    const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+    const [editingSale, setEditingSale] = useState<Sale | null>(null);
+    const [isEditExpenseOpen, setIsEditExpenseOpen] = useState(false);
+    const [isEditSaleOpen, setIsEditSaleOpen] = useState(false);
+
+    const supabase = createClient();
+
+    // Parse file_path which can be a single URL, JSON array, or relative path
+    const parseFilePaths = (filePath: string | null): string[] => {
+        if (!filePath) return [];
+
+        // Try to parse as JSON array
+        if (filePath.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(filePath);
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch {
+                // Not valid JSON, treat as single value
+            }
+        }
+
+        // Single value
+        return [filePath];
+    };
+
+    const getFileUrl = (filePath: string): string => {
+        // If already a full URL, return as-is
+        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+            return filePath;
+        }
+        // Otherwise, generate URL from receipts bucket
+        const { data } = supabase.storage.from('receipts').getPublicUrl(filePath);
+        return data?.publicUrl || filePath;
+    };
+
+    const getStatusIcon = (status: string | null) => {
+        if (status === 'WARNING') return <AlertTriangle className="h-4 w-4 text-red-500" />;
+        if (status === 'OK') return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <Clock className="h-4 w-4 text-gray-400" />;
+    };
+
+    const fiscalYears = getSelectableFiscalYears();
+
+    // Edit handlers
+    const handleEditExpense = (expense: Expense) => {
+        setEditingExpense(expense);
+        setIsEditExpenseOpen(true);
+    };
+
+    const handleUpdateExpense = (updatedExpense: Expense) => {
+        setExpenses(prev => prev.map(e => e.id === updatedExpense.id ? updatedExpense : e));
+    };
+
+    const handleDeleteExpense = async (id: string) => {
+        if (!confirm('この経費を削除しますか？')) return;
+
+        const { error } = await supabase.from('expenses').delete().eq('id', id);
+        if (!error) {
+            setExpenses(prev => prev.filter(e => e.id !== id));
+        } else {
+            alert('削除に失敗しました');
+        }
+    };
+
+    const handleEditSale = (sale: Sale) => {
+        setEditingSale(sale);
+        setIsEditSaleOpen(true);
+    };
+
+    const handleUpdateSale = (updatedSale: Sale) => {
+        setSales(prev => prev.map(s => s.id === updatedSale.id ? updatedSale : s));
+    };
+
+    const handleDeleteSale = async (id: string) => {
+        if (!confirm('この売上を削除しますか？')) return;
+
+        const { error } = await supabase.from('sales').delete().eq('id', id);
+        if (!error) {
+            setSales(prev => prev.filter(s => s.id !== id));
+        } else {
+            alert('削除に失敗しました');
+        }
+    };
+
+    const handleRefreshBankAccounts = async () => {
+        const supabase = createClient();
+        const { data } = await supabase
+            .from('bank_accounts')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (data) setBankAccounts(data);
+    };
+
+    const handleDeleteBankAccount = async (id: string) => {
+        if (!confirm('この口座を削除しますか？関連する取引も削除されます。')) return;
+
+        const supabase = createClient();
+        const { error } = await supabase.from('bank_accounts').delete().eq('id', id);
+        if (!error) {
+            setBankAccounts(prev => prev.filter(a => a.id !== id));
+            setBankTransactions(prev => prev.filter(t => t.bank_account_id !== id));
+            setCsvImports(prev => prev.filter(i => i.bank_account_id !== id));
+        } else {
+            alert('削除に失敗しました');
+        }
+    };
+
+    const handleDownloadCsv = async (importId: string, fileName: string) => {
+        try {
+            const response = await fetch(`/api/bank/download-csv?id=${importId}`, {
+                credentials: 'include',
+            });
+            if (!response.ok) throw new Error('ダウンロードに失敗しました');
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error(error);
+            alert('ダウンロードに失敗しました');
+        }
+    };
+
+    // 口座ごとのインポート履歴を取得
+    const getImportsForAccount = (accountId: string) => {
+        return csvImports.filter(i => i.bank_account_id === accountId);
+    };
+
+    // Filter expenses/sales by fiscal year and department
+    const filteredExpenses = expenses.filter((item) => {
+        const matchesFiscalYear = filterFiscalYear !== 'ALL'
+            ? isInFiscalYear(item.transaction_date, parseInt(filterFiscalYear))
+            : true;
+        const matchesDept = filterDepartment !== 'ALL' ? item.department === filterDepartment : true;
+        return matchesFiscalYear && matchesDept;
+    });
+
+    const filteredSales = sales.filter((item) => {
+        const matchesFiscalYear = filterFiscalYear !== 'ALL'
+            ? isInFiscalYear(item.transaction_date, parseInt(filterFiscalYear))
+            : true;
+        const matchesDept = filterDepartment !== 'ALL' ? item.department === filterDepartment : true;
+        const matchesChannel = filterChannel !== 'ALL' ? item.channel === filterChannel : true;
+        return matchesFiscalYear && matchesDept && matchesChannel;
+    });
+
+    // Filter bank accounts by category
+    const filteredBankAccounts = bankAccounts.filter((account) => {
+        const matchesCategory = filterAccountCategory !== 'ALL'
+            ? (account.category || 'BUSINESS') === filterAccountCategory
+            : true;
+        return matchesCategory;
+    });
+
+    // Filter bank transactions by account and fiscal year
+    const filteredBankTransactions = bankTransactions.filter((item) => {
+        const matchesFiscalYear = filterFiscalYear !== 'ALL'
+            ? isInFiscalYear(item.transaction_date, parseInt(filterFiscalYear))
+            : true;
+        const matchesAccount = filterBankAccount !== 'ALL'
+            ? item.bank_account_id === filterBankAccount
+            : true;
+        // カテゴリフィルターがかかっている場合、そのカテゴリの口座の取引のみ表示
+        const account = bankAccounts.find(a => a.id === item.bank_account_id);
+        const matchesCategory = filterAccountCategory !== 'ALL'
+            ? (account?.category || 'BUSINESS') === filterAccountCategory
+            : true;
+        return matchesFiscalYear && matchesAccount && matchesCategory;
+    });
+
+    // Calculate totals
+    const expensesTotal = filteredExpenses.reduce((sum, item) => sum + item.amount, 0);
+    const salesTotal = filteredSales.reduce((sum, item) => sum + item.amount, 0);
+    const transactionsDeposit = filteredBankTransactions.reduce((sum, item) => sum + item.deposit, 0);
+    const transactionsWithdrawal = filteredBankTransactions.reduce((sum, item) => sum + item.withdrawal, 0);
+
+    const getAccountName = (accountId: string) => {
+        const account = bankAccounts.find(a => a.id === accountId);
+        return account?.name || '不明';
+    };
+
+    const getAccountWithCategory = (accountId: string) => {
+        const account = bankAccounts.find(a => a.id === accountId);
+        return {
+            name: account?.name || '不明',
+            category: account?.category || 'BUSINESS' as AccountCategory,
+        };
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* Tab Buttons */}
+            <div className="flex gap-2 border-b pb-2">
+                <Button
+                    variant={viewType === 'expenses' ? 'default' : 'ghost'}
+                    onClick={() => setViewType('expenses')}
+                    size="sm"
+                >
+                    経費
+                </Button>
+                <Button
+                    variant={viewType === 'sales' ? 'default' : 'ghost'}
+                    onClick={() => setViewType('sales')}
+                    size="sm"
+                >
+                    売上
+                </Button>
+                <Button
+                    variant={viewType === 'bank_accounts' ? 'default' : 'ghost'}
+                    onClick={() => setViewType('bank_accounts')}
+                    size="sm"
+                >
+                    <Building2 className="mr-1 h-4 w-4" />
+                    銀行口座
+                </Button>
+                <Button
+                    variant={viewType === 'bank_transactions' ? 'default' : 'ghost'}
+                    onClick={() => setViewType('bank_transactions')}
+                    size="sm"
+                >
+                    銀行取引
+                </Button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-end sm:items-center">
+                <div className="flex gap-2 items-center flex-wrap">
+                    {(viewType === 'expenses' || viewType === 'sales' || viewType === 'bank_transactions') && (
+                        <Select value={filterFiscalYear} onValueChange={setFilterFiscalYear}>
+                            <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="会計年度" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">全期間</SelectItem>
+                                {fiscalYears.map((year) => (
+                                    <SelectItem key={year} value={year.toString()}>
+                                        {year}年度 ({year}/11〜{year + 1}/10)
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+
+                    {(viewType === 'expenses' || viewType === 'sales') && (
+                        <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+                            <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="事業区分" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">全事業区分</SelectItem>
+                                <SelectItem value="PHOTO">写真事業</SelectItem>
+                                <SelectItem value="VIDEO">動画事業</SelectItem>
+                                <SelectItem value="WEB">WEB制作</SelectItem>
+                                <SelectItem value="COMMON">共通経費</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
+
+                    {viewType === 'sales' && (
+                        <Select value={filterChannel} onValueChange={setFilterChannel}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="チャネル" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">全チャネル</SelectItem>
+                                <SelectItem value="DIRECT">直接営業</SelectItem>
+                                <SelectItem value="REFERRAL">紹介</SelectItem>
+                                <SelectItem value="SNS">SNS</SelectItem>
+                                <SelectItem value="WEBSITE">ウェブサイト</SelectItem>
+                                <SelectItem value="PLATFORM_KURASHI">くらしのマーケット</SelectItem>
+                                <SelectItem value="PLATFORM_TOTTA">Totta</SelectItem>
+                                <SelectItem value="REPEAT">リピート</SelectItem>
+                                <SelectItem value="OTHER">その他</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
+
+                    {(viewType === 'bank_accounts' || viewType === 'bank_transactions') && (
+                        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                            <button
+                                type="button"
+                                onClick={() => setFilterAccountCategory('ALL')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                    filterAccountCategory === 'ALL'
+                                        ? 'bg-white dark:bg-gray-700 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                                全て
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterAccountCategory('BUSINESS')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                    filterAccountCategory === 'BUSINESS'
+                                        ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                                <Briefcase className="h-3.5 w-3.5" />
+                                ビジネス
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setFilterAccountCategory('PERSONAL')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                                    filterAccountCategory === 'PERSONAL'
+                                        ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 shadow-sm'
+                                        : 'hover:bg-gray-200 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                                <User className="h-3.5 w-3.5" />
+                                個人
+                            </button>
+                        </div>
+                    )}
+
+                    {viewType === 'bank_transactions' && bankAccounts.length > 0 && (
+                        <Select value={filterBankAccount} onValueChange={setFilterBankAccount}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="口座" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">全口座</SelectItem>
+                                {filteredBankAccounts.map((account) => (
+                                    <SelectItem key={account.id} value={account.id}>
+                                        {account.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
+
+                <div className="flex gap-2">
+                    {viewType === 'bank_accounts' && (
+                        <>
+                            <CsvExportButton
+                                type="bank_accounts"
+                                accountCategory={filterAccountCategory}
+                            />
+                            <BankAccountForm
+                                onSuccess={handleRefreshBankAccounts}
+                                defaultCategory={filterAccountCategory !== 'ALL' ? filterAccountCategory : 'BUSINESS'}
+                            />
+                        </>
+                    )}
+                    {viewType === 'bank_transactions' && (
+                        <CsvExportButton
+                            type="bank_transactions"
+                            fiscalYear={filterFiscalYear !== 'ALL' ? parseInt(filterFiscalYear) : undefined}
+                            accountCategory={filterAccountCategory}
+                            bankAccountId={filterBankAccount}
+                        />
+                    )}
+                    {(viewType === 'expenses' || viewType === 'sales') && (
+                        <CsvExportButton
+                            type={viewType}
+                            fiscalYear={filterFiscalYear !== 'ALL' ? parseInt(filterFiscalYear) : undefined}
+                            department={filterDepartment}
+                            channel={viewType === 'sales' ? filterChannel : undefined}
+                        />
+                    )}
+                </div>
+            </div>
+
+            {/* Summary */}
+            {viewType === 'expenses' && (
+                <div className="text-right text-sm text-gray-600">
+                    {filteredExpenses.length}件 / 合計: <span className="font-bold text-lg">¥{expensesTotal.toLocaleString()}</span>
+                </div>
+            )}
+            {viewType === 'sales' && (
+                <div className="text-right text-sm text-gray-600">
+                    {filteredSales.length}件 / 合計: <span className="font-bold text-lg">¥{salesTotal.toLocaleString()}</span>
+                </div>
+            )}
+            {viewType === 'bank_accounts' && (
+                <div className="text-right text-sm text-gray-600">
+                    {filterAccountCategory !== 'ALL' && (
+                        <span className={`mr-2 px-2 py-0.5 rounded text-xs ${
+                            filterAccountCategory === 'BUSINESS'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                        }`}>
+                            {filterAccountCategory === 'BUSINESS' ? 'ビジネス' : '個人'}
+                        </span>
+                    )}
+                    {filteredBankAccounts.length}件の口座
+                    {filterAccountCategory !== 'ALL' && bankAccounts.length !== filteredBankAccounts.length && (
+                        <span className="text-gray-400 ml-1">（全{bankAccounts.length}件）</span>
+                    )}
+                </div>
+            )}
+            {viewType === 'bank_transactions' && (
+                <div className="text-right text-sm text-gray-600">
+                    {filteredBankTransactions.length}件 / 入金: <span className="text-green-600 font-bold">¥{transactionsDeposit.toLocaleString()}</span>
+                    {' / '}出金: <span className="text-red-600 font-bold">¥{transactionsWithdrawal.toLocaleString()}</span>
+                </div>
+            )}
+
+            {/* Tables */}
+            <div className="rounded-md border">
+                {/* Expenses Table */}
+                {viewType === 'expenses' && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>取引日</TableHead>
+                                <TableHead>事業区分</TableHead>
+                                <TableHead>勘定科目</TableHead>
+                                <TableHead>摘要</TableHead>
+                                <TableHead className="text-right">金額</TableHead>
+                                <TableHead className="text-center">AI監査</TableHead>
+                                <TableHead className="text-center">ファイル</TableHead>
+                                <TableHead className="text-center">操作</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredExpenses.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} className="text-center h-24">
+                                        データが見つかりません。
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredExpenses.map((item) => (
+                                    <TableRow key={item.id} className={
+                                        item.ai_check_status === 'WARNING'
+                                            ? 'bg-red-50 dark:bg-red-900/20'
+                                            : ''
+                                    }>
+                                        <TableCell>{item.transaction_date}</TableCell>
+                                        <TableCell>
+                                            <DepartmentBadge department={item.department} />
+                                        </TableCell>
+                                        <TableCell>{item.account_item}</TableCell>
+                                        <TableCell className="max-w-[200px] truncate" title={item.description || ''}>
+                                            {item.description || '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            ¥{item.amount.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <div className="flex justify-center" title={item.ai_audit_note || ''}>
+                                                {getStatusIcon(item.ai_check_status)}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {(() => {
+                                                const files = parseFilePaths(item.file_path);
+                                                if (files.length === 0) {
+                                                    return <span className="text-gray-300">-</span>;
+                                                }
+                                                if (files.length === 1) {
+                                                    return (
+                                                        <a
+                                                            href={getFileUrl(files[0])}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                                                            title="ファイルをダウンロード"
+                                                        >
+                                                            <FileDown className="h-4 w-4" />
+                                                        </a>
+                                                    );
+                                                }
+                                                return (
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        {files.map((file, idx) => (
+                                                            <a
+                                                                key={idx}
+                                                                href={getFileUrl(file)}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                                                                title={`ファイル ${idx + 1}`}
+                                                            >
+                                                                <FileDown className="h-3 w-3" />
+                                                            </a>
+                                                        ))}
+                                                        <span className="text-xs text-gray-500 ml-1">({files.length})</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <div className="flex justify-center gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleEditExpense(item)}
+                                                >
+                                                    <Pencil className="h-4 w-4 text-gray-500" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteExpense(item.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+
+                {/* Sales Table */}
+                {viewType === 'sales' && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>取引日</TableHead>
+                                <TableHead>事業区分</TableHead>
+                                <TableHead>取引先</TableHead>
+                                <TableHead>チャネル</TableHead>
+                                <TableHead className="text-right">金額</TableHead>
+                                <TableHead className="text-right">手数料</TableHead>
+                                <TableHead className="text-right">手取り</TableHead>
+                                <TableHead className="text-center">入金</TableHead>
+                                <TableHead className="text-center">ファイル</TableHead>
+                                <TableHead className="text-center">操作</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredSales.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={10} className="text-center h-24">
+                                        データが見つかりません。
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredSales.map((item) => (
+                                    <TableRow key={item.id}>
+                                        <TableCell>{item.transaction_date}</TableCell>
+                                        <TableCell>
+                                            <DepartmentBadge department={item.department} />
+                                        </TableCell>
+                                        <TableCell>{item.client_name}</TableCell>
+                                        <TableCell>
+                                            <ChannelBadge channel={item.channel} />
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono">
+                                            ¥{item.amount.toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-red-600 dark:text-red-400">
+                                            {item.fee_amount ? (
+                                                <span title={item.fee_rate ? `${item.fee_rate}%` : ''}>
+                                                    -¥{item.fee_amount.toLocaleString()}
+                                                    {item.fee_rate && <span className="text-xs ml-1">({item.fee_rate}%)</span>}
+                                                </span>
+                                            ) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-green-600 dark:text-green-400">
+                                            {item.net_amount ? `¥${item.net_amount.toLocaleString()}` : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {item.status === 'PAID' ? (
+                                                <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />
+                                            ) : (
+                                                <Clock className="h-4 w-4 text-yellow-500 mx-auto" />
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            {(() => {
+                                                const files = parseFilePaths(item.file_path);
+                                                if (files.length === 0) {
+                                                    return <span className="text-gray-300">-</span>;
+                                                }
+                                                if (files.length === 1) {
+                                                    return (
+                                                        <a
+                                                            href={getFileUrl(files[0])}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                                                            title="ファイルをダウンロード"
+                                                        >
+                                                            <FileDown className="h-4 w-4" />
+                                                        </a>
+                                                    );
+                                                }
+                                                return (
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        {files.map((file, idx) => (
+                                                            <a
+                                                                key={idx}
+                                                                href={getFileUrl(file)}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center text-blue-600 hover:text-blue-800"
+                                                                title={`ファイル ${idx + 1}`}
+                                                            >
+                                                                <FileDown className="h-3 w-3" />
+                                                            </a>
+                                                        ))}
+                                                        <span className="text-xs text-gray-500 ml-1">({files.length})</span>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <div className="flex justify-center gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleEditSale(item)}
+                                                >
+                                                    <Pencil className="h-4 w-4 text-gray-500" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteSale(item.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+
+                {/* Bank Accounts Table */}
+                {viewType === 'bank_accounts' && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>口座名</TableHead>
+                                <TableHead>カテゴリ</TableHead>
+                                <TableHead>銀行</TableHead>
+                                <TableHead>支店</TableHead>
+                                <TableHead>口座番号</TableHead>
+                                <TableHead className="text-right">開始残高</TableHead>
+                                <TableHead>インポート履歴</TableHead>
+                                <TableHead className="text-center">状態</TableHead>
+                                <TableHead className="text-center">操作</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredBankAccounts.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={9} className="text-center h-24">
+                                        {filterAccountCategory !== 'ALL'
+                                            ? `${filterAccountCategory === 'BUSINESS' ? 'ビジネス' : '個人'}口座が登録されていません。`
+                                            : '銀行口座が登録されていません。'}
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredBankAccounts.map((account) => {
+                                    const imports = getImportsForAccount(account.id);
+                                    const category = account.category || 'BUSINESS';
+                                    return (
+                                        <TableRow key={account.id}>
+                                            <TableCell className="font-medium">{account.name}</TableCell>
+                                            <TableCell>
+                                                <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                                                    category === 'BUSINESS'
+                                                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                                        : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                                                }`}>
+                                                    {category === 'BUSINESS' ? (
+                                                        <><Briefcase className="h-3 w-3" />ビジネス</>
+                                                    ) : (
+                                                        <><User className="h-3 w-3" />個人</>
+                                                    )}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                                                    {getBankTypeName(account.bank_type)}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>{account.branch_name || '-'}</TableCell>
+                                            <TableCell className="font-mono">{account.account_number || '-'}</TableCell>
+                                            <TableCell className="text-right font-mono">
+                                                ¥{account.initial_balance.toLocaleString()}
+                                            </TableCell>
+                                            <TableCell>
+                                                {imports.length === 0 ? (
+                                                    <span className="text-gray-400 text-sm">-</span>
+                                                ) : (
+                                                    <div className="space-y-1">
+                                                        {imports.slice(0, 3).map((imp) => (
+                                                            <button
+                                                                key={imp.id}
+                                                                onClick={() => handleDownloadCsv(imp.id, imp.file_name)}
+                                                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                                                title={`${imp.records_count}件 - ${new Date(imp.created_at).toLocaleDateString('ja-JP')}`}
+                                                            >
+                                                                <FileDown className="h-3 w-3" />
+                                                                <span className="truncate max-w-[120px]">{imp.file_name}</span>
+                                                            </button>
+                                                        ))}
+                                                        {imports.length > 3 && (
+                                                            <span className="text-xs text-gray-500">他{imports.length - 3}件</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {account.is_active ? (
+                                                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">有効</span>
+                                                ) : (
+                                                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">無効</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteBankAccount(account.id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+
+                {/* Bank Transactions Table */}
+                {viewType === 'bank_transactions' && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>取引日</TableHead>
+                                <TableHead>口座</TableHead>
+                                <TableHead>摘要</TableHead>
+                                <TableHead className="text-right">入金</TableHead>
+                                <TableHead className="text-right">出金</TableHead>
+                                <TableHead className="text-right">残高</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredBankTransactions.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="text-center h-24">
+                                        取引データが見つかりません。
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredBankTransactions.map((item) => {
+                                    const accountInfo = getAccountWithCategory(item.bank_account_id);
+                                    return (
+                                        <TableRow key={item.id}>
+                                            <TableCell>{item.transaction_date}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                                        accountInfo.category === 'BUSINESS'
+                                                            ? 'bg-blue-500'
+                                                            : 'bg-purple-500'
+                                                    }`} title={accountInfo.category === 'BUSINESS' ? 'ビジネス' : '個人'} />
+                                                    <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                                                        {accountInfo.name}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="max-w-[250px] truncate" title={item.description}>
+                                                {item.description}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono text-green-600">
+                                                {item.deposit > 0 ? `¥${item.deposit.toLocaleString()}` : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono text-red-600">
+                                                {item.withdrawal > 0 ? `¥${item.withdrawal.toLocaleString()}` : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">
+                                                {item.balance !== null ? `¥${item.balance.toLocaleString()}` : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+            </div>
+
+            {/* Edit Dialogs */}
+            <EditExpenseDialog
+                expense={editingExpense}
+                open={isEditExpenseOpen}
+                onOpenChange={setIsEditExpenseOpen}
+                onUpdate={handleUpdateExpense}
+            />
+            <EditSaleDialog
+                sale={editingSale}
+                open={isEditSaleOpen}
+                onOpenChange={setIsEditSaleOpen}
+                onUpdate={handleUpdateSale}
+            />
+        </div>
+    );
+}
+
+function DepartmentBadge({ department }: { department: string }) {
+    const labels: Record<string, string> = {
+        PHOTO: '写真事業',
+        VIDEO: '動画事業',
+        WEB: 'WEB制作',
+        COMMON: '共通経費',
+    };
+    return (
+        <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+            {labels[department] || department}
+        </span>
+    );
+}
+
+function ChannelBadge({ channel }: { channel: string | null }) {
+    if (!channel) return <span className="text-gray-400">-</span>;
+
+    const labels: Record<string, string> = {
+        DIRECT: '直接',
+        REFERRAL: '紹介',
+        SNS: 'SNS',
+        WEBSITE: 'Web',
+        PLATFORM_KURASHI: 'くらし',
+        PLATFORM_TOTTA: 'Totta',
+        REPEAT: 'リピート',
+        OTHER: 'その他',
+    };
+    return (
+        <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded">
+            {labels[channel] || channel}
+        </span>
+    );
+}
