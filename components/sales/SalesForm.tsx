@@ -159,6 +159,21 @@ export function SalesForm() {
         }
     };
 
+    // チャネル名を取得
+    const getChannelLabel = (channelValue: string): string => {
+        const labels: Record<string, string> = {
+            DIRECT: '直接営業',
+            REFERRAL: '紹介',
+            SNS: 'SNS',
+            WEBSITE: 'ウェブサイト',
+            PLATFORM_KURASHI: 'くらしのマーケット',
+            PLATFORM_TOTTA: 'Totta',
+            REPEAT: 'リピート',
+            OTHER: 'その他',
+        };
+        return labels[channelValue] || channelValue;
+    };
+
     const onSubmit = async (values: FormValues) => {
         setIsSubmitting(true);
         try {
@@ -172,7 +187,8 @@ export function SalesForm() {
 
             const { feeAmount, feeRate, netAmount } = calculateFee();
 
-            const { error } = await supabase.from('sales').insert({
+            // 売上を登録
+            const { error: salesError } = await supabase.from('sales').insert({
                 transaction_date: values.transaction_date,
                 amount: values.amount,
                 fee_amount: feeAmount > 0 ? feeAmount : null,
@@ -186,7 +202,27 @@ export function SalesForm() {
                 user_id: user.id,
             });
 
-            if (error) throw error;
+            if (salesError) throw salesError;
+
+            // 手数料がある場合は経費として自動登録
+            if (feeAmount > 0) {
+                const channelLabel = getChannelLabel(values.channel);
+                const { error: expenseError } = await supabase.from('expenses').insert({
+                    transaction_date: values.transaction_date,
+                    amount: feeAmount,
+                    department: values.department,
+                    account_item: '支払手数料',
+                    description: `${channelLabel}手数料 - ${values.client_name}`,
+                    user_id: user.id,
+                    ai_check_status: 'UNCHECKED',
+                });
+
+                if (expenseError) {
+                    console.error('手数料の経費登録に失敗:', expenseError);
+                    // 売上は登録されているので、経費登録失敗は警告のみ
+                    alert('売上は登録されましたが、手数料の経費登録に失敗しました。手動で経費を登録してください。');
+                }
+            }
 
             setIsSuccess(true);
             setTimeout(() => setIsSuccess(false), 3000);
