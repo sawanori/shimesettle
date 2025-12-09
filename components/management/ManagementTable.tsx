@@ -17,8 +17,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User } from 'lucide-react';
-import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory } from '@/types/supabase';
+import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User, FileCheck, Eye, Download } from 'lucide-react';
+import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory, Document } from '@/types/supabase';
 import { CsvExportButton } from './CsvExportButton';
 import { BankAccountForm } from '@/components/bank/BankAccountForm';
 import { EditExpenseDialog } from './EditExpenseDialog';
@@ -31,7 +31,7 @@ import {
     isInFiscalYear,
 } from '@/lib/fiscalYear';
 
-type ViewType = 'expenses' | 'sales' | 'bank_accounts' | 'bank_transactions';
+type ViewType = 'expenses' | 'sales' | 'bank_accounts' | 'bank_transactions' | 'documents';
 
 interface ManagementTableProps {
     initialExpenses: Expense[];
@@ -39,6 +39,7 @@ interface ManagementTableProps {
     initialBankAccounts: BankAccount[];
     initialBankTransactions: BankTransaction[];
     initialCsvImports: CsvImport[];
+    initialDocuments: Document[];
 }
 
 export function ManagementTable({
@@ -47,6 +48,7 @@ export function ManagementTable({
     initialBankAccounts,
     initialBankTransactions,
     initialCsvImports,
+    initialDocuments,
 }: ManagementTableProps) {
     const [viewType, setViewType] = useState<ViewType>('expenses');
     const [filterFiscalYear, setFilterFiscalYear] = useState<string>('ALL');
@@ -54,9 +56,11 @@ export function ManagementTable({
     const [filterChannel, setFilterChannel] = useState<string>('ALL');
     const [filterBankAccount, setFilterBankAccount] = useState<string>('ALL');
     const [filterAccountCategory, setFilterAccountCategory] = useState<AccountCategory | 'ALL'>('ALL');
+    const [filterDocumentType, setFilterDocumentType] = useState<string>('ALL');
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
     const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
     const [csvImports, setCsvImports] = useState(initialCsvImports);
+    const [documents, setDocuments] = useState(initialDocuments);
 
     // Edit state
     const [expenses, setExpenses] = useState(initialExpenses);
@@ -197,6 +201,47 @@ export function ManagementTable({
         return csvImports.filter(i => i.bank_account_id === accountId);
     };
 
+    // Document handlers
+    const handleDeleteDocument = async (id: string) => {
+        if (!confirm('この書類を削除しますか？')) return;
+
+        const { error } = await supabase.from('documents').delete().eq('id', id);
+        if (!error) {
+            setDocuments(prev => prev.filter(d => d.id !== id));
+        } else {
+            alert('削除に失敗しました');
+        }
+    };
+
+    const handleDownloadDocument = async (filePath: string, fileName: string) => {
+        try {
+            const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
+            if (data?.publicUrl) {
+                const response = await fetch(data.publicUrl);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('ダウンロードに失敗しました');
+        }
+    };
+
+    const getDocumentUrl = (filePath: string): string => {
+        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+            return filePath;
+        }
+        const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
+        return data?.publicUrl || filePath;
+    };
+
     // Filter expenses/sales by fiscal year and department
     const filteredExpenses = expenses.filter((item) => {
         const matchesFiscalYear = filterFiscalYear !== 'ALL'
@@ -237,6 +282,12 @@ export function ManagementTable({
             ? (account?.category || 'BUSINESS') === filterAccountCategory
             : true;
         return matchesFiscalYear && matchesAccount && matchesCategory;
+    });
+
+    // Filter documents by type
+    const filteredDocuments = documents.filter((doc) => {
+        const matchesType = filterDocumentType !== 'ALL' ? doc.document_type === filterDocumentType : true;
+        return matchesType;
     });
 
     // Calculate totals
@@ -290,6 +341,14 @@ export function ManagementTable({
                     size="sm"
                 >
                     銀行取引
+                </Button>
+                <Button
+                    variant={viewType === 'documents' ? 'default' : 'ghost'}
+                    onClick={() => setViewType('documents')}
+                    size="sm"
+                >
+                    <FileCheck className="mr-1 h-4 w-4" />
+                    書類
                 </Button>
             </div>
 
@@ -401,6 +460,22 @@ export function ManagementTable({
                             </SelectContent>
                         </Select>
                     )}
+
+                    {viewType === 'documents' && (
+                        <Select value={filterDocumentType} onValueChange={setFilterDocumentType}>
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="書類種別" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">すべて</SelectItem>
+                                <SelectItem value="証明書">証明書</SelectItem>
+                                <SelectItem value="契約書">契約書</SelectItem>
+                                <SelectItem value="許可証">許可証</SelectItem>
+                                <SelectItem value="届出書">届出書</SelectItem>
+                                <SelectItem value="その他">その他</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
                 </div>
 
                 <div className="flex gap-2">
@@ -467,6 +542,14 @@ export function ManagementTable({
                 <div className="text-right text-sm text-gray-600">
                     {filteredBankTransactions.length}件 / 入金: <span className="text-green-600 font-bold">¥{transactionsDeposit.toLocaleString()}</span>
                     {' / '}出金: <span className="text-red-600 font-bold">¥{transactionsWithdrawal.toLocaleString()}</span>
+                </div>
+            )}
+            {viewType === 'documents' && (
+                <div className="text-right text-sm text-gray-600">
+                    {filteredDocuments.length}件の書類
+                    {filterDocumentType !== 'ALL' && documents.length !== filteredDocuments.length && (
+                        <span className="text-gray-400 ml-1">（全{documents.length}件）</span>
+                    )}
                 </div>
             )}
 
@@ -849,6 +932,114 @@ export function ManagementTable({
                                             </TableCell>
                                             <TableCell className="text-right font-mono">
                                                 {item.balance !== null ? `¥${item.balance.toLocaleString()}` : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+
+                {/* Documents Table */}
+                {viewType === 'documents' && (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>サムネイル</TableHead>
+                                <TableHead>タイトル</TableHead>
+                                <TableHead>種別</TableHead>
+                                <TableHead>発行日</TableHead>
+                                <TableHead>有効期限</TableHead>
+                                <TableHead>登録日</TableHead>
+                                <TableHead className="text-center">操作</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredDocuments.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center h-24">
+                                        書類が登録されていません。
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                filteredDocuments.map((doc) => {
+                                    const fileUrl = getDocumentUrl(doc.file_path);
+                                    const isPdf = doc.file_type === 'application/pdf' || doc.file_name.toLowerCase().endsWith('.pdf');
+                                    const isExpired = doc.expiry_date && new Date(doc.expiry_date) < new Date();
+                                    return (
+                                        <TableRow key={doc.id} className={isExpired ? 'bg-red-50 dark:bg-red-900/20' : ''}>
+                                            <TableCell>
+                                                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex items-center justify-center">
+                                                    {isPdf ? (
+                                                        <iframe
+                                                            src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                                                            className="w-full h-full border-0 pointer-events-none"
+                                                            title={doc.title}
+                                                        />
+                                                    ) : (
+                                                        <img
+                                                            src={fileUrl}
+                                                            alt={doc.title}
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="font-medium">{doc.title}</div>
+                                                {doc.description && (
+                                                    <div className="text-xs text-gray-500 truncate max-w-[200px]" title={doc.description}>
+                                                        {doc.description}
+                                                    </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                                                    {doc.document_type}
+                                                </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {doc.issue_date || '-'}
+                                            </TableCell>
+                                            <TableCell>
+                                                {doc.expiry_date ? (
+                                                    <span className={isExpired ? 'text-red-600 font-medium' : ''}>
+                                                        {doc.expiry_date}
+                                                        {isExpired && <span className="ml-1 text-xs">(期限切れ)</span>}
+                                                    </span>
+                                                ) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-gray-500">
+                                                {new Date(doc.created_at).toLocaleDateString('ja-JP')}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <div className="flex justify-center gap-1">
+                                                    <a
+                                                        href={fileUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                        title="プレビュー"
+                                                    >
+                                                        <Eye className="h-4 w-4 text-blue-500" />
+                                                    </a>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleDownloadDocument(doc.file_path, doc.file_name)}
+                                                        title="ダウンロード"
+                                                    >
+                                                        <Download className="h-4 w-4 text-green-500" />
+                                                    </Button>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteDocument(doc.id)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     );

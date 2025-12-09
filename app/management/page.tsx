@@ -8,7 +8,7 @@ export default async function ManagementPage() {
     const supabase = await createClient();
 
     // Fetch all data in parallel
-    const [expensesResult, salesResult, bankAccountsResult, bankTransactionsResult, csvImportsResult] = await Promise.all([
+    const [expensesResult, salesResult, bankAccountsResult, bankTransactionsResult, csvImportsResult, documentsResult] = await Promise.all([
         supabase
             .from('expenses')
             .select('*')
@@ -27,6 +27,10 @@ export default async function ManagementPage() {
             .order('transaction_date', { ascending: false }),
         supabase
             .from('csv_imports')
+            .select('*')
+            .order('created_at', { ascending: false }),
+        supabase
+            .from('documents')
             .select('*')
             .order('created_at', { ascending: false }),
     ]);
@@ -51,6 +55,7 @@ export default async function ManagementPage() {
                         initialBankAccounts={bankAccountsResult.data || []}
                         initialBankTransactions={bankTransactionsResult.data || []}
                         initialCsvImports={csvImportsResult.data || []}
+                        initialDocuments={documentsResult.data || []}
                     />
                 </div>
             </main>
