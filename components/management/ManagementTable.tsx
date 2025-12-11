@@ -17,7 +17,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User, FileCheck, Eye, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User, FileCheck, Eye, Download, Search } from 'lucide-react';
 import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory, Document, AccountType } from '@/types/supabase';
 import { CsvExportButton } from './CsvExportButton';
 import { BankAccountForm } from '@/components/bank/BankAccountForm';
@@ -58,6 +59,7 @@ export function ManagementTable({
     const [filterAccountCategory, setFilterAccountCategory] = useState<AccountCategory | 'ALL'>('ALL');
     const [filterAccountType, setFilterAccountType] = useState<AccountType | 'ALL'>('ALL');
     const [filterDocumentType, setFilterDocumentType] = useState<string>('ALL');
+    const [filterFolderNumber, setFilterFolderNumber] = useState<string>('');
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
     const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
     const [csvImports, setCsvImports] = useState(initialCsvImports);
@@ -259,13 +261,16 @@ export function ManagementTable({
         return data?.publicUrl || filePath;
     };
 
-    // Filter expenses/sales by fiscal year and department
+    // Filter expenses/sales by fiscal year, department, and folder number
     const filteredExpenses = expenses.filter((item) => {
         const matchesFiscalYear = filterFiscalYear !== 'ALL'
             ? isInFiscalYear(item.transaction_date, parseInt(filterFiscalYear))
             : true;
         const matchesDept = filterDepartment !== 'ALL' ? item.department === filterDepartment : true;
-        return matchesFiscalYear && matchesDept;
+        const matchesFolderNumber = filterFolderNumber
+            ? item.folder_number?.includes(filterFolderNumber)
+            : true;
+        return matchesFiscalYear && matchesDept && matchesFolderNumber;
     });
 
     const filteredSales = sales.filter((item) => {
@@ -407,6 +412,18 @@ export function ManagementTable({
                                 <SelectItem value="COMMON">共通経費</SelectItem>
                             </SelectContent>
                         </Select>
+                    )}
+
+                    {viewType === 'expenses' && (
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="No.検索"
+                                value={filterFolderNumber}
+                                onChange={(e) => setFilterFolderNumber(e.target.value)}
+                                className="w-[100px] pl-8 h-9 font-mono"
+                            />
+                        </div>
                     )}
 
                     {viewType === 'sales' && (
@@ -618,6 +635,7 @@ export function ManagementTable({
                         <TableHeader>
                             <TableRow>
                                 <TableHead>領収書</TableHead>
+                                <TableHead className="w-16">No.</TableHead>
                                 <TableHead>取引日</TableHead>
                                 <TableHead>事業区分</TableHead>
                                 <TableHead>勘定科目</TableHead>
@@ -630,7 +648,7 @@ export function ManagementTable({
                         <TableBody>
                             {filteredExpenses.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="text-center h-24">
+                                    <TableCell colSpan={9} className="text-center h-24">
                                         データが見つかりません。
                                     </TableCell>
                                 </TableRow>
@@ -686,6 +704,15 @@ export function ManagementTable({
                                                             </div>
                                                         )}
                                                     </div>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-center">
+                                                {item.folder_number ? (
+                                                    <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                                                        {item.folder_number}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
                                                 )}
                                             </TableCell>
                                             <TableCell>{item.transaction_date}</TableCell>

@@ -75,6 +75,7 @@ export interface Database {
           account_item: string;
           description: string | null;
           file_path: string | null;
+          folder_number: string | null;
           status: string;
           ai_check_status: string | null;
           ai_audit_note: string | null;
@@ -89,6 +90,7 @@ export interface Database {
           account_item: string;
           description?: string | null;
           file_path?: string | null;
+          folder_number?: string | null;
           status?: string;
           ai_check_status?: string | null;
           ai_audit_note?: string | null;
@@ -103,6 +105,7 @@ export interface Database {
           account_item?: string;
           description?: string | null;
           file_path?: string | null;
+          folder_number?: string | null;
           status?: string;
           ai_check_status?: string | null;
           ai_audit_note?: string | null;

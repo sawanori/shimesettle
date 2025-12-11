@@ -37,6 +37,7 @@ const formSchema = z.object({
     department: z.enum(['PHOTO', 'VIDEO', 'WEB', 'COMMON']),
     account_item: z.string().min(1, '勘定科目は必須です'),
     description: z.string().optional(),
+    folder_number: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -59,6 +60,7 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onUpdate }: Edi
             department: 'COMMON',
             account_item: '',
             description: '',
+            folder_number: '',
         },
     });
 
@@ -70,6 +72,7 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onUpdate }: Edi
                 department: expense.department as 'PHOTO' | 'VIDEO' | 'WEB' | 'COMMON',
                 account_item: expense.account_item,
                 description: expense.description || '',
+                folder_number: expense.folder_number || '',
             });
         }
     }, [expense, open, form]);
@@ -88,6 +91,7 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onUpdate }: Edi
                     department: values.department,
                     account_item: values.account_item,
                     description: values.description || null,
+                    folder_number: values.folder_number || null,
                 })
                 .eq('id', expense.id)
                 .select()
@@ -184,19 +188,36 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onUpdate }: Edi
                             />
                         </div>
 
-                        <FormField
-                            control={form.control}
-                            name="description"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>摘要</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="店名、詳細など..." {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
+                        <div className="grid grid-cols-4 gap-4">
+                            <FormField
+                                control={form.control}
+                                name="folder_number"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>No.</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="001" {...field} className="font-mono" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <div className="col-span-3">
+                                <FormField
+                                    control={form.control}
+                                    name="description"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>摘要</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="店名、詳細など..." {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        </div>
 
                         <div className="flex justify-end gap-2 pt-4">
                             <Button

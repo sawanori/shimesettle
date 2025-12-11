@@ -33,12 +33,13 @@ import { useRouter } from 'next/navigation';
 
 // ============ Single Form Schema ============
 const formSchema = z.object({
-    transaction_date: z.string().min(1, '日付は必須です'),
-    amount: z.coerce.number().min(1, '金額は0より大きい必要があります'),
-    department: z.enum(['PHOTO', 'VIDEO', 'WEB', 'COMMON']),
-    account_item: z.string().min(1, '勘定科目は必須です'),
+    transaction_date: z.string().optional(),
+    amount: z.coerce.number().min(0),
+    department: z.enum(['PHOTO', 'VIDEO', 'WEB', 'COMMON']).optional(),
+    account_item: z.string().optional(),
     description: z.string().optional(),
     file_path: z.string().optional(),
+    folder_number: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -56,6 +57,7 @@ interface ExpenseData {
     department: 'PHOTO' | 'VIDEO' | 'WEB' | 'COMMON';
     account_item: string;
     description: string;
+    folder_number: string;
     status: 'pending' | 'analyzing' | 'analyzed' | 'error' | 'registering' | 'registered';
     error?: string;
 }
@@ -88,6 +90,7 @@ export function ExpenseForm() {
             account_item: '',
             description: '',
             file_path: '',
+            folder_number: '',
         },
     });
 
@@ -141,16 +144,17 @@ export function ExpenseForm() {
             }
 
             const { error } = await supabase.from('expenses').insert({
-                transaction_date: values.transaction_date,
-                amount: values.amount,
-                department: values.department,
-                account_item: values.account_item,
+                transaction_date: values.transaction_date || new Date().toISOString().split('T')[0],
+                amount: values.amount || 0,
+                department: values.department || 'COMMON',
+                account_item: values.account_item || '未設定',
                 description: values.description || null,
                 file_path: values.file_path || null,
+                folder_number: values.folder_number || null,
                 user_id: user.id,
                 status: 'UNCONFIRMED',
                 ai_check_status: 'PENDING',
-            });
+            } as any);
 
             if (error) throw error;
 
@@ -195,6 +199,10 @@ export function ExpenseForm() {
             const id = Math.random().toString(36).substring(2);
             const previewUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
 
+            // フォルダー番号をファイル名から抽出（例: "001_receipt.jpg" -> "001"）
+            const folderMatch = file.name.match(/^(\d+)/);
+            const folderNumber = folderMatch ? folderMatch[1] : '';
+
             const expense: ExpenseData = {
                 id,
                 file,
@@ -205,6 +213,7 @@ export function ExpenseForm() {
                 department: 'COMMON',
                 account_item: '',
                 description: '',
+                folder_number: folderNumber,
                 status: 'pending',
             };
             newExpenses.push(expense);
@@ -233,24 +242,48 @@ export function ExpenseForm() {
 
                 setProcessingMessage(`AI解析中... (${i + 1}/${selectedFiles.length})`);
 
-                const response = await fetch('/api/analyze-receipt', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imageUrl: publicUrl }),
-                });
+                // AI解析（最大3回リトライ）
+                let analyzeSuccess = false;
+                let lastError: Error | null = null;
 
-                if (!response.ok) throw new Error('AI解析に失敗しました');
+                for (let retry = 0; retry < 3 && !analyzeSuccess; retry++) {
+                    if (retry > 0) {
+                        setProcessingMessage(`AI解析中... (${i + 1}/${selectedFiles.length}) - リトライ ${retry + 1}/3`);
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // リトライ前に1秒待機
+                    }
 
-                const data = await response.json();
+                    try {
+                        const response = await fetch('/api/analyze-receipt', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ imageUrl: publicUrl }),
+                        });
 
-                expense.transaction_date = data.transaction_date || new Date().toISOString().split('T')[0];
-                expense.amount = data.amount || 0;
-                expense.department = data.department || 'COMMON';
-                expense.account_item = data.account_item || '';
-                expense.description = data.vendor_name
-                    ? `${data.vendor_name}${data.description ? ' / ' + data.description : ''}`
-                    : data.description || '';
-                expense.status = 'analyzed';
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`AI解析に失敗しました: ${errorText}`);
+                        }
+
+                        const data = await response.json();
+
+                        expense.transaction_date = data.transaction_date || new Date().toISOString().split('T')[0];
+                        expense.amount = data.amount || 0;
+                        expense.department = data.department || 'COMMON';
+                        expense.account_item = data.account_item || '';
+                        expense.description = data.vendor_name
+                            ? `${data.vendor_name}${data.description ? ' / ' + data.description : ''}`
+                            : data.description || '';
+                        expense.status = 'analyzed';
+                        analyzeSuccess = true;
+                    } catch (retryError) {
+                        lastError = retryError instanceof Error ? retryError : new Error('処理に失敗しました');
+                        console.error(`AI解析リトライ ${retry + 1}/3 失敗:`, retryError);
+                    }
+                }
+
+                if (!analyzeSuccess) {
+                    throw lastError || new Error('AI解析に失敗しました');
+                }
 
             } catch (error) {
                 console.error('Processing error:', error);
@@ -321,6 +354,7 @@ export function ExpenseForm() {
                     account_item: expense.account_item,
                     description: expense.description || null,
                     file_path: expense.fileUrl,
+                    folder_number: expense.folder_number || null,
                     user_id: user.id,
                     status: 'UNCONFIRMED',
                     ai_check_status: 'PENDING',
@@ -485,21 +519,38 @@ export function ExpenseForm() {
                                 </motion.div>
                             </div>
 
-                            <motion.div variants={itemVariants}>
-                                <FormField
-                                    control={form.control}
-                                    name="description"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel className="text-muted-foreground">摘要</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="店名、詳細など..." {...field} className="bg-white/50 dark:bg-black/20 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-primary/20 transition-all" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                            </motion.div>
+                            <div className="grid grid-cols-4 gap-6">
+                                <motion.div variants={itemVariants} className="col-span-1">
+                                    <FormField
+                                        control={form.control}
+                                        name="folder_number"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-muted-foreground">No.</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="001" {...field} className="bg-white/50 dark:bg-black/20 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-primary/20 transition-all font-mono" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </motion.div>
+                                <motion.div variants={itemVariants} className="col-span-3">
+                                    <FormField
+                                        control={form.control}
+                                        name="description"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel className="text-muted-foreground">摘要</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="店名、詳細など..." {...field} className="bg-white/50 dark:bg-black/20 border-zinc-200 dark:border-zinc-800 focus:ring-2 focus:ring-primary/20 transition-all" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </motion.div>
+                            </div>
 
                             <motion.div variants={itemVariants} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
                                 <Button
@@ -575,12 +626,11 @@ export function ExpenseForm() {
                                     {expenses.map((expense) => (
                                         <div
                                             key={expense.id}
-                                            className={`flex items-center gap-3 p-3 rounded-lg border ${
-                                                expense.status === 'analyzing' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' :
+                                            className={`flex items-center gap-3 p-3 rounded-lg border ${expense.status === 'analyzing' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' :
                                                 expense.status === 'analyzed' ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' :
-                                                expense.status === 'error' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' :
-                                                'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
-                                            }`}
+                                                    expense.status === 'error' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' :
+                                                        'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+                                                }`}
                                         >
                                             <div className="w-10 h-10 rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0">
                                                 {expense.previewUrl ? (
@@ -629,9 +679,8 @@ export function ExpenseForm() {
                                     {expenses.map((expense) => (
                                         <div
                                             key={expense.id}
-                                            className={`p-4 rounded-lg border ${
-                                                expense.status === 'error' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
-                                            }`}
+                                            className={`p-4 rounded-lg border ${expense.status === 'error' ? 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+                                                }`}
                                         >
                                             <div className="flex gap-4">
                                                 <div className="w-20 h-20 rounded overflow-hidden bg-gray-200 dark:bg-gray-700 flex-shrink-0">
@@ -697,13 +746,24 @@ export function ExpenseForm() {
                                                                     />
                                                                 </div>
                                                             </div>
-                                                            <div>
-                                                                <Label className="text-xs">摘要</Label>
-                                                                <Input
-                                                                    value={expense.description}
-                                                                    onChange={(e) => updateExpense(expense.id, 'description', e.target.value)}
-                                                                    className="h-8 text-sm"
-                                                                />
+                                                            <div className="grid grid-cols-4 gap-2">
+                                                                <div className="col-span-1">
+                                                                    <Label className="text-xs">No.</Label>
+                                                                    <Input
+                                                                        value={expense.folder_number}
+                                                                        onChange={(e) => updateExpense(expense.id, 'folder_number', e.target.value)}
+                                                                        className="h-8 text-sm font-mono"
+                                                                        placeholder="001"
+                                                                    />
+                                                                </div>
+                                                                <div className="col-span-3">
+                                                                    <Label className="text-xs">摘要</Label>
+                                                                    <Input
+                                                                        value={expense.description}
+                                                                        onChange={(e) => updateExpense(expense.id, 'description', e.target.value)}
+                                                                        className="h-8 text-sm"
+                                                                    />
+                                                                </div>
                                                             </div>
                                                             <Button
                                                                 size="sm"
@@ -718,7 +778,12 @@ export function ExpenseForm() {
                                                         <div>
                                                             <div className="flex justify-between items-start">
                                                                 <div>
-                                                                    <p className="font-bold text-lg">¥{expense.amount.toLocaleString()}</p>
+                                                                    {expense.folder_number && (
+                                                                        <span className="text-xs font-mono bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded mr-2">
+                                                                            No.{expense.folder_number}
+                                                                        </span>
+                                                                    )}
+                                                                    <p className="font-bold text-lg inline">¥{expense.amount.toLocaleString()}</p>
                                                                     <p className="text-sm text-gray-600 dark:text-gray-400">{expense.transaction_date}</p>
                                                                 </div>
                                                                 <div className="flex gap-1">
