@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { SalesPieChart } from "@/components/dashboard/SalesPieChart";
 import { RevenueBarChart } from "@/components/dashboard/RevenueBarChart";
+import { Header } from "@/components/layout/Header";
 import { Receipt, TrendingUp, Settings, Building2, FileCheck } from "lucide-react";
 import { Department } from "@/types/supabase";
 import { getCurrentFiscalYear, getFiscalYearRange, getFiscalYearLabel, isInFiscalYear } from "@/lib/fiscalYear";
@@ -105,12 +106,17 @@ async function getDashboardData(fiscalYear: number) {
 }
 
 export default async function Home() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
     const fiscalYear = getCurrentFiscalYear();
     const data = await getDashboardData(fiscalYear);
 
     return (
-        <div className="min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-            <main className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
+        <>
+            <Header userEmail={user?.email} />
+            <div className="min-h-screen p-8 pb-20 pt-16 gap-16 sm:p-20 sm:pt-16 font-[family-name:var(--font-geist-sans)]">
+                <main className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold">NonTurn決算申告</h1>
@@ -191,6 +197,7 @@ export default async function Home() {
                     </Card>
                 </div>
             </main>
-        </div>
+            </div>
+        </>
     );
 }
