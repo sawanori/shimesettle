@@ -1,4 +1,4 @@
--- 証明書類テーブル作成
+-- 参考書類テーブル作成
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL,

@@ -44,7 +44,7 @@ test.describe('Responsive Design - Mobile', () => {
         await page.screenshot({ path: 'test-results/mobile-documents.png', fullPage: true });
 
         // Check title is visible
-        const title = await page.getByText('証明書類').isVisible();
+        const title = await page.getByText('参考書類').isVisible();
         expect(title).toBeTruthy();
 
         // Check tabs are visible

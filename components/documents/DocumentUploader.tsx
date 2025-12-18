@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, X, FileText, Image } from 'lucide-react';
+import { Loader2, Upload, X, FileText } from 'lucide-react';
 
 interface DocumentUploaderProps {
     onUploadComplete: (url: string, fileName: string, fileType: string) => void;
@@ -58,9 +58,11 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         if (!file) return;
 
         // ファイルタイプチェック
-        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-        if (!validTypes.includes(file.type)) {
-            alert('対応していないファイル形式です。PDF, PNG, JPGをアップロードしてください。');
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/csv'];
+        const validExtensions = ['.csv'];
+        const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+        if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+            alert('対応していないファイル形式です。PDF, PNG, JPG, CSVをアップロードしてください。');
             return;
         }
 
@@ -125,14 +127,14 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                                 <span className="font-semibold">クリック</span> または <span className="font-semibold">ドラッグ＆ドロップ</span>
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                                PDF, PNG, JPG
+                                PDF, PNG, JPG, CSV
                             </p>
                         </div>
                         <Input
                             id="dropzone-document"
                             type="file"
                             className="hidden"
-                            accept="image/*,.pdf"
+                            accept="image/*,.pdf,.csv"
                             onChange={handleFileChange}
                             disabled={isUploading}
                         />

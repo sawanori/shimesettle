@@ -451,13 +451,13 @@ export type CsvImport = Database['public']['Tables']['csv_imports']['Row'];
 /** CSVインポート履歴の新規作成用データ */
 export type CsvImportInsert = Database['public']['Tables']['csv_imports']['Insert'];
 
-/** 証明書類テーブルの行データ */
+/** 参考書類テーブルの行データ */
 export type Document = Database['public']['Tables']['documents']['Row'];
 
-/** 証明書類の新規作成用データ */
+/** 参考書類の新規作成用データ */
 export type DocumentInsert = Database['public']['Tables']['documents']['Insert'];
 
-/** 証明書類の更新用データ */
+/** 参考書類の更新用データ */
 export type DocumentUpdate = Database['public']['Tables']['documents']['Update'];
 
 // ============================================

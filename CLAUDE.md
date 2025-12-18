@@ -70,7 +70,7 @@ Six main tables with RLS enabled:
 - **bank_accounts**: name, bank_type, account_type (BANK/CREDIT_CARD), branch_name, initial_balance
 - **bank_transactions**: transaction_date, description, withdrawal, deposit, balance, import_hash, linked_expense_id/linked_sale_id
 - **csv_imports**: file_path, file_name, records_count (original CSV storage metadata)
-- **documents**: title, document_type, issue_date, expiry_date, file_path (証明書類管理)
+- **documents**: title, document_type, issue_date, expiry_date, file_path (参考書類管理)
 
 Storage buckets: `receipts`, `invoices`, `bank-csv`, `documents` (private)
 

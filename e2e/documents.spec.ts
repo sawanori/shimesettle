@@ -21,7 +21,7 @@ test.describe('Documents Page', () => {
         await page.screenshot({ path: 'test-results/documents-page.png', fullPage: true });
 
         // Check title
-        const title = await page.getByText('証明書類').isVisible();
+        const title = await page.getByText('参考書類').isVisible();
         console.log('Title visible:', title);
         expect(title).toBeTruthy();
 
