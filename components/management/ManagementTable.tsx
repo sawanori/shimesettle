@@ -63,6 +63,8 @@ export function ManagementTable({
     // キーワード検索用state
     const [searchExpenseKeyword, setSearchExpenseKeyword] = useState<string>('');
     const [searchSaleKeyword, setSearchSaleKeyword] = useState<string>('');
+    // 書類一括ダウンロード用state
+    const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
     const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
     const [csvImports, setCsvImports] = useState(initialCsvImports);
@@ -237,23 +239,89 @@ export function ManagementTable({
 
     const handleDownloadDocument = async (filePath: string, fileName: string) => {
         try {
-            const { data } = supabase.storage.from('documents').getPublicUrl(filePath);
-            if (data?.publicUrl) {
-                const response = await fetch(data.publicUrl);
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
+            // プライベートバケットの場合は署名付きURLを使用
+            // file_pathがフルURLの場合はそのまま使用
+            let downloadUrl: string;
+
+            if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                downloadUrl = filePath;
+            } else {
+                // 署名付きURL（60秒有効）を生成
+                const { data: signedData, error: signedError } = await supabase.storage
+                    .from('documents')
+                    .createSignedUrl(filePath, 60);
+
+                if (signedError || !signedData?.signedUrl) {
+                    console.error('Signed URL error:', signedError);
+                    alert('ダウンロードURLの生成に失敗しました');
+                    return;
+                }
+                downloadUrl = signedData.signedUrl;
             }
+
+            // ダウンロード実行
+            const response = await fetch(downloadUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
         } catch (error) {
-            console.error(error);
+            console.error('Download error:', error);
             alert('ダウンロードに失敗しました');
         }
+    };
+
+    // 書類選択ハンドラー
+    const handleToggleDocumentSelection = (id: string) => {
+        setSelectedDocumentIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const handleToggleAllDocuments = () => {
+        if (selectedDocumentIds.size === filteredDocuments.length) {
+            // 全選択解除
+            setSelectedDocumentIds(new Set());
+        } else {
+            // 全選択
+            setSelectedDocumentIds(new Set(filteredDocuments.map(doc => doc.id)));
+        }
+    };
+
+    // 一括ダウンロード
+    const handleBulkDownloadDocuments = async () => {
+        const selectedDocs = filteredDocuments.filter(doc => selectedDocumentIds.has(doc.id));
+        if (selectedDocs.length === 0) return;
+
+        // 確認ダイアログ
+        if (!confirm(`${selectedDocs.length}件の書類をダウンロードしますか？`)) return;
+
+        // 順次ダウンロード（ブラウザの制限を考慮して少し間隔を空ける）
+        for (let i = 0; i < selectedDocs.length; i++) {
+            const doc = selectedDocs[i];
+            await handleDownloadDocument(doc.file_path, doc.file_name);
+            // 次のダウンロードまで少し待機（ブラウザがブロックしないように）
+            if (i < selectedDocs.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        // 選択解除
+        setSelectedDocumentIds(new Set());
     };
 
     const getDocumentUrl = (filePath: string): string => {
@@ -616,6 +684,17 @@ export function ManagementTable({
                             department={filterDepartment}
                             channel={viewType === 'sales' ? filterChannel : undefined}
                         />
+                    )}
+                    {viewType === 'documents' && selectedDocumentIds.size > 0 && (
+                        <Button
+                            onClick={handleBulkDownloadDocuments}
+                            variant="outline"
+                            size="sm"
+                            className="flex items-center gap-2"
+                        >
+                            <Download className="h-4 w-4" />
+                            {selectedDocumentIds.size}件をダウンロード
+                        </Button>
                     )}
                 </div>
             </div>
@@ -1114,6 +1193,15 @@ export function ManagementTable({
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={filteredDocuments.length > 0 && selectedDocumentIds.size === filteredDocuments.length}
+                                        onChange={handleToggleAllDocuments}
+                                        className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                                        title="全選択"
+                                    />
+                                </TableHead>
                                 <TableHead>サムネイル</TableHead>
                                 <TableHead>タイトル</TableHead>
                                 <TableHead>種別</TableHead>
@@ -1126,7 +1214,7 @@ export function ManagementTable({
                         <TableBody>
                             {filteredDocuments.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center h-24">
+                                    <TableCell colSpan={8} className="text-center h-24">
                                         書類が登録されていません。
                                     </TableCell>
                                 </TableRow>
@@ -1137,6 +1225,14 @@ export function ManagementTable({
                                     const isExpired = doc.expiry_date && new Date(doc.expiry_date) < new Date();
                                     return (
                                         <TableRow key={doc.id} className={isExpired ? 'bg-red-50 dark:bg-red-900/20' : ''}>
+                                            <TableCell>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedDocumentIds.has(doc.id)}
+                                                    onChange={() => handleToggleDocumentSelection(doc.id)}
+                                                    className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <a
                                                     href={fileUrl}
