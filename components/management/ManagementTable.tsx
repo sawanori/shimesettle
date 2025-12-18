@@ -60,6 +60,9 @@ export function ManagementTable({
     const [filterAccountType, setFilterAccountType] = useState<AccountType | 'ALL'>('ALL');
     const [filterDocumentType, setFilterDocumentType] = useState<string>('ALL');
     const [filterFolderNumber, setFilterFolderNumber] = useState<string>('');
+    // キーワード検索用state
+    const [searchExpenseKeyword, setSearchExpenseKeyword] = useState<string>('');
+    const [searchSaleKeyword, setSearchSaleKeyword] = useState<string>('');
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
     const [bankTransactions, setBankTransactions] = useState(initialBankTransactions);
     const [csvImports, setCsvImports] = useState(initialCsvImports);
@@ -261,7 +264,7 @@ export function ManagementTable({
         return data?.publicUrl || filePath;
     };
 
-    // Filter expenses/sales by fiscal year, department, and folder number
+    // Filter expenses/sales by fiscal year, department, folder number, and keyword
     const filteredExpenses = expenses.filter((item) => {
         const matchesFiscalYear = filterFiscalYear !== 'ALL'
             ? isInFiscalYear(item.transaction_date, parseInt(filterFiscalYear))
@@ -270,7 +273,16 @@ export function ManagementTable({
         const matchesFolderNumber = filterFolderNumber
             ? item.folder_number?.includes(filterFolderNumber)
             : true;
-        return matchesFiscalYear && matchesDept && matchesFolderNumber;
+        // キーワード検索: 摘要・勘定科目を検索（大文字小文字を区別しない）
+        const matchesKeyword = searchExpenseKeyword
+            ? (() => {
+                const keyword = searchExpenseKeyword.toLowerCase();
+                const description = (item.description || '').toLowerCase();
+                const accountItem = (item.account_item || '').toLowerCase();
+                return description.includes(keyword) || accountItem.includes(keyword);
+            })()
+            : true;
+        return matchesFiscalYear && matchesDept && matchesFolderNumber && matchesKeyword;
     });
 
     const filteredSales = sales.filter((item) => {
@@ -279,7 +291,11 @@ export function ManagementTable({
             : true;
         const matchesDept = filterDepartment !== 'ALL' ? item.department === filterDepartment : true;
         const matchesChannel = filterChannel !== 'ALL' ? item.channel === filterChannel : true;
-        return matchesFiscalYear && matchesDept && matchesChannel;
+        // キーワード検索: 取引先名を検索（大文字小文字を区別しない）
+        const matchesKeyword = searchSaleKeyword
+            ? (item.client_name || '').toLowerCase().includes(searchSaleKeyword.toLowerCase())
+            : true;
+        return matchesFiscalYear && matchesDept && matchesChannel && matchesKeyword;
     });
 
     // Filter bank accounts by category and type
@@ -415,34 +431,56 @@ export function ManagementTable({
                     )}
 
                     {viewType === 'expenses' && (
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="No.検索"
-                                value={filterFolderNumber}
-                                onChange={(e) => setFilterFolderNumber(e.target.value)}
-                                className="w-[100px] pl-8 h-9 font-mono"
-                            />
-                        </div>
+                        <>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                    placeholder="No.検索"
+                                    value={filterFolderNumber}
+                                    onChange={(e) => setFilterFolderNumber(e.target.value)}
+                                    className="w-[100px] pl-8 h-9 font-mono"
+                                />
+                            </div>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                    placeholder="摘要・勘定科目で検索"
+                                    value={searchExpenseKeyword}
+                                    onChange={(e) => setSearchExpenseKeyword(e.target.value)}
+                                    className="w-[200px] pl-8 h-9"
+                                />
+                            </div>
+                        </>
                     )}
 
                     {viewType === 'sales' && (
-                        <Select value={filterChannel} onValueChange={setFilterChannel}>
-                            <SelectTrigger className="w-[160px]">
-                                <SelectValue placeholder="チャネル" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ALL">全チャネル</SelectItem>
-                                <SelectItem value="DIRECT">直接営業</SelectItem>
-                                <SelectItem value="REFERRAL">紹介</SelectItem>
-                                <SelectItem value="SNS">SNS</SelectItem>
-                                <SelectItem value="WEBSITE">ウェブサイト</SelectItem>
-                                <SelectItem value="PLATFORM_KURASHI">くらしのマーケット</SelectItem>
-                                <SelectItem value="PLATFORM_TOTTA">Totta</SelectItem>
-                                <SelectItem value="REPEAT">リピート</SelectItem>
-                                <SelectItem value="OTHER">その他</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <>
+                            <Select value={filterChannel} onValueChange={setFilterChannel}>
+                                <SelectTrigger className="w-[160px]">
+                                    <SelectValue placeholder="チャネル" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">全チャネル</SelectItem>
+                                    <SelectItem value="DIRECT">直接営業</SelectItem>
+                                    <SelectItem value="REFERRAL">紹介</SelectItem>
+                                    <SelectItem value="SNS">SNS</SelectItem>
+                                    <SelectItem value="WEBSITE">ウェブサイト</SelectItem>
+                                    <SelectItem value="PLATFORM_KURASHI">くらしのマーケット</SelectItem>
+                                    <SelectItem value="PLATFORM_TOTTA">Totta</SelectItem>
+                                    <SelectItem value="REPEAT">リピート</SelectItem>
+                                    <SelectItem value="OTHER">その他</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                    placeholder="取引先名で検索"
+                                    value={searchSaleKeyword}
+                                    onChange={(e) => setSearchSaleKeyword(e.target.value)}
+                                    className="w-[180px] pl-8 h-9"
+                                />
+                            </div>
+                        </>
                     )}
 
                     {(viewType === 'bank_accounts' || viewType === 'bank_transactions') && (
