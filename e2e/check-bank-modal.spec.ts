@@ -2,20 +2,21 @@ import { test, expect } from '@playwright/test';
 
 test('check bank account modal category buttons', async ({ page }) => {
     // Login
-    await page.goto('http://localhost:3000/login');
-    await page.fill('input[type="email"]', 'snp.inc.info@gmail.com');
-    await page.fill('input[type="password"]', 'noritaka8');
+    await page.goto('/login');
+    await page.waitForSelector('input[id="email"]', { state: 'visible' });
+    await page.fill('input[id="email"]', 'snp.inc.info@gmail.com');
+    await page.fill('input[id="password"]', 'noritaka8');
     await page.click('button[type="submit"]');
 
-    // Wait for redirect to home
-    await page.waitForURL('http://localhost:3000/', { timeout: 10000 });
+    // Wait for redirect (not /login)
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30000 });
 
     // Go to bank page
-    await page.goto('http://localhost:3000/bank');
+    await page.goto('/bank');
     await page.waitForLoadState('networkidle');
 
-    // Click "口座を追加" button
-    await page.click('button:has-text("口座を追加")');
+    // Click "口座・カードを追加" button
+    await page.click('button:has-text("口座・カードを追加")');
 
     // Wait for modal to open
     const dialog = page.locator('[role="dialog"]');

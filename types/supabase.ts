@@ -386,12 +386,121 @@ export interface Database {
           }
         ];
       };
+      chat_conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'chat_conversations_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          role: string;
+          content: string;
+          data: Json | null;
+          intent: Json | null;
+          tokens_used: number | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          role: string;
+          content: string;
+          data?: Json | null;
+          intent?: Json | null;
+          tokens_used?: number | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          conversation_id?: string;
+          role?: string;
+          content?: string;
+          data?: Json | null;
+          intent?: Json | null;
+          tokens_used?: number | null;
+          created_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'chat_messages_conversation_id_fkey';
+            columns: ['conversation_id'];
+            referencedRelation: 'chat_conversations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      chat_usage: {
+        Row: {
+          id: string;
+          user_id: string;
+          date: string;
+          request_count: number | null;
+          tokens_used: number | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          date?: string;
+          request_count?: number | null;
+          tokens_used?: number | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          date?: string;
+          request_count?: number | null;
+          tokens_used?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'chat_usage_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      increment_chat_usage: {
+        Args: {
+          p_user_id: string;
+          p_date: string;
+          p_tokens: number;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       department: Department;
@@ -459,6 +568,21 @@ export type DocumentInsert = Database['public']['Tables']['documents']['Insert']
 
 /** 参考書類の更新用データ */
 export type DocumentUpdate = Database['public']['Tables']['documents']['Update'];
+
+/** チャット会話テーブルの行データ */
+export type ChatConversation = Database['public']['Tables']['chat_conversations']['Row'];
+
+/** チャット会話の新規作成用データ */
+export type ChatConversationInsert = Database['public']['Tables']['chat_conversations']['Insert'];
+
+/** チャットメッセージテーブルの行データ */
+export type ChatMessage = Database['public']['Tables']['chat_messages']['Row'];
+
+/** チャットメッセージの新規作成用データ */
+export type ChatMessageInsert = Database['public']['Tables']['chat_messages']['Insert'];
+
+/** チャット使用量テーブルの行データ */
+export type ChatUsage = Database['public']['Tables']['chat_usage']['Row'];
 
 // ============================================
 // Supabase Client 型付けヘルパー
