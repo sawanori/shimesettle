@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import iconv from 'iconv-lite';
 import { getFiscalYearRange } from '@/lib/fiscalYear';
 import type { Department, SalesChannel, AccountCategory } from '@/types/supabase';
 
@@ -184,12 +183,14 @@ export async function GET(request: Request) {
 
     const csvString = header + body;
 
-    // Convert to Shift-JIS
-    const buffer = iconv.encode(csvString, 'Shift_JIS');
+    // UTF-8 BOM + CSV content
+    // BOM (Byte Order Mark) を追加することで、WindowsのExcelでも正しく文字コードを認識
+    const BOM = '\uFEFF';
+    const csvWithBom = BOM + csvString;
 
-    return new NextResponse(new Uint8Array(buffer), {
+    return new NextResponse(csvWithBom, {
         headers: {
-            'Content-Type': 'text/csv; charset=Shift_JIS',
+            'Content-Type': 'text/csv; charset=utf-8',
             'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
         },
     });

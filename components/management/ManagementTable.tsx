@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertTriangle, CheckCircle, Clock, Trash2, Building2, FileDown, Pencil, Briefcase, User, FileCheck, Eye, Download, Search } from 'lucide-react';
+import { SearchInput } from '@/components/ui/search-input';
 import { Expense, Sale, BankAccount, BankTransaction, CsvImport, AccountCategory, Document, AccountType } from '@/types/supabase';
 import { CsvExportButton } from './CsvExportButton';
 import { BankAccountForm } from '@/components/bank/BankAccountForm';
@@ -63,6 +64,7 @@ export function ManagementTable({
     // キーワード検索用state
     const [searchExpenseKeyword, setSearchExpenseKeyword] = useState<string>('');
     const [searchSaleKeyword, setSearchSaleKeyword] = useState<string>('');
+    const [searchDocumentKeyword, setSearchDocumentKeyword] = useState<string>('');
     // 書類一括ダウンロード用state
     const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(new Set());
     const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
@@ -396,10 +398,20 @@ export function ManagementTable({
         return matchesFiscalYear && matchesAccount && matchesCategory && matchesType;
     });
 
-    // Filter documents by type
+    // Filter documents by type and keyword
     const filteredDocuments = documents.filter((doc) => {
         const matchesType = filterDocumentType !== 'ALL' ? doc.document_type === filterDocumentType : true;
-        return matchesType;
+        // キーワード検索: タイトル・ファイル名・説明を検索（大文字小文字を区別しない）
+        const matchesKeyword = searchDocumentKeyword
+            ? (() => {
+                const keyword = searchDocumentKeyword.toLowerCase();
+                const title = (doc.title || '').toLowerCase();
+                const fileName = (doc.file_name || '').toLowerCase();
+                const description = (doc.description || '').toLowerCase();
+                return title.includes(keyword) || fileName.includes(keyword) || description.includes(keyword);
+            })()
+            : true;
+        return matchesType && matchesKeyword;
     });
 
     // Calculate totals
@@ -509,15 +521,12 @@ export function ManagementTable({
                                     className="w-[100px] pl-8 h-9 font-mono"
                                 />
                             </div>
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <Input
-                                    placeholder="摘要・勘定科目で検索"
-                                    value={searchExpenseKeyword}
-                                    onChange={(e) => setSearchExpenseKeyword(e.target.value)}
-                                    className="w-[200px] pl-8 h-9"
-                                />
-                            </div>
+                            <SearchInput
+                                placeholder="摘要・勘定科目で検索"
+                                value={searchExpenseKeyword}
+                                onChange={setSearchExpenseKeyword}
+                                className="w-[200px]"
+                            />
                         </>
                     )}
 
@@ -539,15 +548,12 @@ export function ManagementTable({
                                     <SelectItem value="OTHER">その他</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <Input
-                                    placeholder="取引先名で検索"
-                                    value={searchSaleKeyword}
-                                    onChange={(e) => setSearchSaleKeyword(e.target.value)}
-                                    className="w-[180px] pl-8 h-9"
-                                />
-                            </div>
+                            <SearchInput
+                                placeholder="取引先名で検索"
+                                value={searchSaleKeyword}
+                                onChange={setSearchSaleKeyword}
+                                className="w-[180px]"
+                            />
                         </>
                     )}
 
@@ -640,19 +646,27 @@ export function ManagementTable({
                     )}
 
                     {viewType === 'documents' && (
-                        <Select value={filterDocumentType} onValueChange={setFilterDocumentType}>
-                            <SelectTrigger className="w-[160px]">
-                                <SelectValue placeholder="書類種別" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ALL">すべて</SelectItem>
-                                <SelectItem value="証明書">証明書</SelectItem>
-                                <SelectItem value="契約書">契約書</SelectItem>
-                                <SelectItem value="許可証">許可証</SelectItem>
-                                <SelectItem value="届出書">届出書</SelectItem>
-                                <SelectItem value="その他">その他</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        <>
+                            <Select value={filterDocumentType} onValueChange={setFilterDocumentType}>
+                                <SelectTrigger className="w-[160px]">
+                                    <SelectValue placeholder="書類種別" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">すべて</SelectItem>
+                                    <SelectItem value="証明書">証明書</SelectItem>
+                                    <SelectItem value="契約書">契約書</SelectItem>
+                                    <SelectItem value="許可証">許可証</SelectItem>
+                                    <SelectItem value="届出書">届出書</SelectItem>
+                                    <SelectItem value="その他">その他</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <SearchInput
+                                placeholder="タイトル・ファイル名で検索"
+                                value={searchDocumentKeyword}
+                                onChange={setSearchDocumentKeyword}
+                                className="w-[200px]"
+                            />
+                        </>
                     )}
                 </div>
 
