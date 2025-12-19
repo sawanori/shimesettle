@@ -19,7 +19,7 @@ npx playwright test e2e/app.spec.ts           # Run single test file
 ## Project Overview
 
 ShimeSettle (NonTurn決算申告) is an expense, sales, and bank account management app for solo entrepreneurs (ひとり社長). Key features:
-- Receipt/Invoice OCR via OpenAI GPT-4o (supports images and PDF)
+- Receipt/Invoice OCR via OpenAI GPT-5-mini (supports images and PDF)
 - Batch expense registration (up to 4 receipts at once with sequential AI processing)
 - Expense/sales tracking by department (PHOTO, VIDEO, WEB, COMMON)
 - Inline editing and deletion for expenses/sales
@@ -34,8 +34,8 @@ ShimeSettle (NonTurn決算申告) is an expense, sales, and bank account managem
 ### Key Directories
 
 - **app/**: App Router pages and API routes
-  - `api/analyze-receipt/`: OpenAI GPT-4o receipt OCR (images + PDF)
-  - `api/analyze-invoice/`: OpenAI GPT-4o invoice OCR for sales
+  - `api/analyze-receipt/`: OpenAI GPT-5-mini receipt OCR (images + PDF)
+  - `api/analyze-invoice/`: OpenAI GPT-5-mini invoice OCR for sales
   - `api/bank/import-csv/`: Bank CSV import with duplicate detection
   - `api/export-csv/`: Export expenses/sales as Shift-JIS CSV
 - **components/**: Feature-organized React components
@@ -77,12 +77,12 @@ Storage buckets: `receipts`, `invoices`, `bank-csv`, `documents` (private)
 ### Data Flow Patterns
 
 **Receipt OCR (Single)**:
-1. Upload image → Supabase Storage → `/api/analyze-receipt` → GPT-4o
+1. Upload image → Supabase Storage → `/api/analyze-receipt` → GPT-5-mini
 2. AI extracts date, amount, vendor, account_item → Form auto-populated → User confirms
 
 **Batch Receipt Registration**:
 1. Select up to 4 files → Sequential upload to Storage
-2. Each file analyzed by GPT-4o one-by-one (with progress bar)
+2. Each file analyzed by GPT-5-mini one-by-one (with progress bar)
 3. Review all results → Edit if needed → Register all at once
 
 **Bank CSV Import**:
