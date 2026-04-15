@@ -60,7 +60,7 @@ export function getFiscalYearLabel(fiscalYear: number): string {
  * 選択可能な会計年度のリストを生成（過去5年分 + 現在）
  */
 export function getSelectableFiscalYears(): number[] {
-    const current = getCurrentFiscalYear();
+    const current = getOngoingFiscalYear();
     const years: number[] = [];
     for (let i = 0; i <= 5; i++) {
         years.push(current - i);

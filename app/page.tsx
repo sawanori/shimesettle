@@ -8,7 +8,8 @@ import { RevenueBarChart } from "@/components/dashboard/RevenueBarChart";
 import { Header } from "@/components/layout/Header";
 import { Receipt, TrendingUp, Settings, Building2, FileCheck } from "lucide-react";
 import { Department } from "@/types/supabase";
-import { getCurrentFiscalYear, getFiscalYearRange, getFiscalYearLabel, isInFiscalYear } from "@/lib/fiscalYear";
+import { getCurrentFiscalYear, getFiscalYearRange, getSelectableFiscalYears } from "@/lib/fiscalYear";
+import { FiscalYearSelector } from "@/components/dashboard/FiscalYearSelector";
 
 interface DepartmentData {
     department: Department;
@@ -105,98 +106,103 @@ async function getDashboardData(fiscalYear: number) {
     };
 }
 
-export default async function Home() {
+export default async function Home(props: { searchParams: Promise<{ year?: string }> }) {
+    const searchParams = await props.searchParams;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const fiscalYear = getCurrentFiscalYear();
+    const fiscalYear = searchParams.year ? parseInt(searchParams.year) : getCurrentFiscalYear();
     const data = await getDashboardData(fiscalYear);
+    const selectableYears = getSelectableFiscalYears();
 
     return (
         <>
             <Header userEmail={user?.email} />
             <div className="min-h-screen p-8 pb-20 pt-16 gap-16 sm:p-20 sm:pt-16 font-[family-name:var(--font-geist-sans)]">
                 <main className="flex flex-col gap-8 w-full max-w-6xl mx-auto">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold">NonTurn決算申告</h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            {getFiscalYearLabel(fiscalYear)}
-                        </p>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
-                        <div className="grid grid-cols-4 sm:flex gap-2 sm:gap-4 w-full sm:w-auto">
-                            <Link href="/expenses">
-                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                    <Receipt className="sm:mr-2 h-4 w-4" />
-                                    <span className="hidden sm:inline">経費登録</span>
-                                    <span className="sm:hidden text-xs">経費</span>
-                                </Button>
-                            </Link>
-                            <Link href="/sales">
-                                <Button className="w-full sm:w-auto" size="sm">
-                                    <TrendingUp className="sm:mr-2 h-4 w-4" />
-                                    <span className="hidden sm:inline">売上登録</span>
-                                    <span className="sm:hidden text-xs">売上</span>
-                                </Button>
-                            </Link>
-                            <Link href="/bank">
-                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                    <Building2 className="sm:mr-2 h-4 w-4" />
-                                    <span className="hidden sm:inline">銀行</span>
-                                    <span className="sm:hidden text-xs">銀行</span>
-                                </Button>
-                            </Link>
-                            <Link href="/documents">
-                                <Button variant="outline" className="w-full sm:w-auto" size="sm">
-                                    <FileCheck className="sm:mr-2 h-4 w-4" />
-                                    <span className="hidden sm:inline">書類</span>
-                                    <span className="sm:hidden text-xs">書類</span>
-                                </Button>
-                            </Link>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl sm:text-3xl font-bold">NonTurn決算申告</h1>
+                            <div className="mt-2">
+                                <FiscalYearSelector
+                                    years={selectableYears}
+                                    currentYear={fiscalYear}
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-col items-center sm:items-start">
-                            <Link href="/management">
-                                <Button variant="outline" className="bg-amber-50 border-amber-300 hover:bg-amber-100 text-amber-800" size="sm">
-                                    <Settings className="mr-2 h-4 w-4" />
-                                    管理コンソール
-                                </Button>
-                            </Link>
-                            <span className="text-[10px] text-gray-500 mt-1">※税理士の方はこちらへ</span>
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
+                            <div className="grid grid-cols-4 sm:flex gap-2 sm:gap-4 w-full sm:w-auto">
+                                <Link href="/expenses">
+                                    <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                        <Receipt className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">経費登録</span>
+                                        <span className="sm:hidden text-xs">経費</span>
+                                    </Button>
+                                </Link>
+                                <Link href="/sales">
+                                    <Button className="w-full sm:w-auto" size="sm">
+                                        <TrendingUp className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">売上登録</span>
+                                        <span className="sm:hidden text-xs">売上</span>
+                                    </Button>
+                                </Link>
+                                <Link href="/bank">
+                                    <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                        <Building2 className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">銀行</span>
+                                        <span className="sm:hidden text-xs">銀行</span>
+                                    </Button>
+                                </Link>
+                                <Link href="/documents">
+                                    <Button variant="outline" className="w-full sm:w-auto" size="sm">
+                                        <FileCheck className="sm:mr-2 h-4 w-4" />
+                                        <span className="hidden sm:inline">書類</span>
+                                        <span className="sm:hidden text-xs">書類</span>
+                                    </Button>
+                                </Link>
+                            </div>
+                            <div className="flex flex-col items-center sm:items-start">
+                                <Link href="/management">
+                                    <Button variant="outline" className="bg-amber-50 border-amber-300 hover:bg-amber-100 text-amber-800" size="sm">
+                                        <Settings className="mr-2 h-4 w-4" />
+                                        管理コンソール
+                                    </Button>
+                                </Link>
+                                <span className="text-[10px] text-gray-500 mt-1">※税理士の方はこちらへ</span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* サマリーカード */}
-                <DashboardSummary
-                    totalSales={data.totalSales}
-                    totalExpenses={data.totalExpenses}
-                    totalProfit={data.totalProfit}
-                    unpaidSales={data.unpaidSales}
-                    businessBankBalance={data.businessBankBalance}
-                />
+                    {/* サマリーカード */}
+                    <DashboardSummary
+                        totalSales={data.totalSales}
+                        totalExpenses={data.totalExpenses}
+                        totalProfit={data.totalProfit}
+                        unpaidSales={data.unpaidSales}
+                        businessBankBalance={data.businessBankBalance}
+                    />
 
-                {/* グラフエリア */}
-                <div className="grid md:grid-cols-2 gap-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>事業別売上構成比</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <SalesPieChart data={data.salesByDepartment} />
-                        </CardContent>
-                    </Card>
+                    {/* グラフエリア */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>事業別売上構成比</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <SalesPieChart data={data.salesByDepartment} />
+                            </CardContent>
+                        </Card>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>事業別収支</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <RevenueBarChart data={data.departmentData} />
-                        </CardContent>
-                    </Card>
-                </div>
-            </main>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>事業別収支</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <RevenueBarChart data={data.departmentData} />
+                            </CardContent>
+                        </Card>
+                    </div>
+                </main>
             </div>
         </>
     );
